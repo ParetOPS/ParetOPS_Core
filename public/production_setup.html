@@ -249,10 +249,10 @@
 
 <script>
   /* ===== Constants & State ===== */
-  const MACHINES = ["M1","M2","M3","M4","M5","M6","M7","M8"];
+  const FALLBACK_MACHINES = ["M1","M2","M3","M4","M5","M6","M7","M8"];
   const SHIFTS = ["Shift 1","Shift 2","Shift 3"];
-  const PROGRAMS = ["A","B","C","D","IDLE"];
-  const DEFAULTS = {"A":12,"B":12,"C":10,"D":8,"IDLE":0};
+  const FALLBACK_PROGRAMS = ["A","B","C","D","IDLE"];
+  const FALLBACK_DEFAULTS = {"A":12,"B":12,"C":10,"D":8,"IDLE":0};
 
   // Palette (douce, pas de vert ni rouge ; IDLE = orange)
   const PALETTE = {
@@ -264,25 +264,29 @@
   };
 
   // Weekly demand (seed)
-  const WEEKLY_DEMAND = { A:25, B:34, C:95, D:65 };
-  const PRODUCED_SO_FAR = { A:0, B:0, C:0, D:0 };
+  let MACHINES = [...FALLBACK_MACHINES];
+  let PROGRAMS = [...FALLBACK_PROGRAMS];
+  let DEFAULTS = { ...FALLBACK_DEFAULTS };
+
+  let WEEKLY_DEMAND = { A:25, B:34, C:95, D:65 };
+  let PRODUCED_SO_FAR = { A:0, B:0, C:0, D:0 };
 
   // per-cell (per shift per machine)
-  const state = SHIFTS.map(()=>Object.fromEntries(MACHINES.map(m=>[m,{prog:null,base:0,value:0,trainee:false,floater:false}])));
+  let state = SHIFTS.map(()=>Object.fromEntries(MACHINES.map(m=>[m,{prog:null,base:0,value:0,trainee:false,floater:false}])));
 
   // meetings per shift
-  const meetings = SHIFTS.map(()=>[]);
+  let meetings = SHIFTS.map(()=>[]);
 
   // short shift per shift
-  const shortShift = SHIFTS.map(()=>({enabled:false, minutes:480}));
+  let shortShift = SHIFTS.map(()=>({enabled:false, minutes:480}));
 
   // refs
-  const refs = SHIFTS.map(()=>Object.fromEntries(MACHINES.map(m=>[m,{}])));
-  const shiftBtnRefs = SHIFTS.map(()=>({btnMeeting:null, btnShort:null}));
+  let refs = SHIFTS.map(()=>Object.fromEntries(MACHINES.map(m=>[m,{}])));
+  let shiftBtnRefs = SHIFTS.map(()=>({btnMeeting:null, btnShort:null}));
 
   // demand refs
-  const demandRefs = { A:null, B:null, C:null, D:null };
-  const demandCards = { A:null, B:null, C:null, D:null };
+  let demandRefs = {};
+  let demandCards = {};
 
   function computeBase(base,t,f){
     let v=base||0;
@@ -311,23 +315,30 @@
   /* ===== Build Grid ===== */
   const grid=document.getElementById('grid'); const flyout=document.getElementById('flyout');
 
-  // Flyout with colored dots
-  flyout.innerHTML = PROGRAMS.map(p=>{
-    const col = PALETTE[p].theme;
-    return `<div class="mi" data-prog="${p}"><span class="dot" style="background:${col}"></span>${p}</div>`;
-  }).join('');
+  function renderGrid() {
+    refs = SHIFTS.map(()=>Object.fromEntries(MACHINES.map(m=>[m,{}])));
 
-  grid.appendChild(makeHeaderCell("",true));
-  MACHINES.forEach(m=>grid.appendChild(makeHeaderCell(m)));
-  SHIFTS.forEach((s,sIdx)=>{
-    grid.appendChild(makeShiftCell(s,sIdx));
-    MACHINES.forEach(mId=>grid.appendChild(makeDataCell(sIdx,mId)));
-  });
+    // Flyout with colored dots
+    flyout.innerHTML = PROGRAMS.map(p=>{
+      const col = PALETTE[p]?.theme || '#6aa3ff';
+      const soft = PALETTE[p]?.soft || 'rgba(106,163,255,.20)';
+      if (!PALETTE[p]) PALETTE[p] = { theme: col, soft };
+      return `<div class="mi" data-prog="${p}"><span class="dot" style="background:${col}"></span>${p}</div>`;
+    }).join('');
 
-  // Weekly Demand block
-  const demandEl = makeDemandBlock();
-  grid.appendChild(demandEl);
-  refreshDemand(); // initial
+    grid.innerHTML = "";
+    grid.appendChild(makeHeaderCell("",true));
+    MACHINES.forEach(m=>grid.appendChild(makeHeaderCell(m)));
+    SHIFTS.forEach((s,sIdx)=>{
+      grid.appendChild(makeShiftCell(s,sIdx));
+      MACHINES.forEach(mId=>grid.appendChild(makeDataCell(sIdx,mId)));
+    });
+
+    // Weekly Demand block
+    const demandEl = makeDemandBlock();
+    grid.appendChild(demandEl);
+    refreshDemand(); // initial
+  }
 
   function makeHeaderCell(content,isCorner=false){
     const c=document.createElement('div'); c.className='cell header';
@@ -518,7 +529,56 @@
     mmTime.innerHTML = times.map(t=>`<option value="${t.value}">${t.text}</option>`).join('');
     mmDuration.innerHTML = [30,60,90,120,150,180,210,240].map(v=>`<option value="${v}">${v}</option>`).join('');
   }
-  initMeetingControls();
+
+  function resetStateStructures() {
+    state = SHIFTS.map(()=>Object.fromEntries(MACHINES.map(m=>[m,{prog:null,base:0,value:0,trainee:false,floater:false}])));
+    meetings = SHIFTS.map(()=>[]);
+    shortShift = SHIFTS.map(()=>({enabled:false, minutes:480}));
+    refs = SHIFTS.map(()=>Object.fromEntries(MACHINES.map(m=>[m,{}])));
+    shiftBtnRefs = SHIFTS.map(()=>({btnMeeting:null, btnShort:null}));
+    demandRefs = Object.fromEntries(PROGRAMS.map(p=>[p,null]));
+    demandCards = Object.fromEntries(PROGRAMS.map(p=>[p,null]));
+  }
+
+  function applyConfig(cfg){
+    const machinesCfg = Array.isArray(cfg?.machines) ? cfg.machines : [];
+    MACHINES = machinesCfg.length ? machinesCfg : [...FALLBACK_MACHINES];
+
+    const progDefs = cfg?.productionSetup?.programs || {};
+    const hasProg = Object.keys(progDefs).length > 0;
+    PROGRAMS = hasProg ? [...Object.keys(progDefs), 'IDLE'] : [...FALLBACK_PROGRAMS];
+    DEFAULTS = hasProg
+      ? Object.fromEntries(Object.entries(progDefs).map(([k,v]) => [k, Number(v?.baseObjective) || 0]))
+      : { ...FALLBACK_DEFAULTS };
+    DEFAULTS.IDLE = 0;
+
+    WEEKLY_DEMAND = Object.fromEntries(PROGRAMS.map(p => {
+      if (p === 'IDLE') return [p, 0];
+      const configured = progDefs[p]?.weeklyDemand;
+      const randomFallback = Math.floor(Math.random() * (120 - 80 + 1)) + 80; // 80..120
+      return [p, Number(configured) || randomFallback];
+    }));
+    PRODUCED_SO_FAR = Object.fromEntries(PROGRAMS.map(p => [p, 0]));
+
+    resetStateStructures();
+    renderGrid();
+    initMeetingControls();
+  }
+
+  async function loadConfigAndInit(){
+    try{
+      const res = await fetch('/api/config');
+      if(res.ok){
+        const cfg = await res.json();
+        applyConfig(cfg);
+        return;
+      }
+      console.warn('Could not load config, using fallback.');
+    }catch(err){
+      console.warn('Could not load config, using fallback.', err);
+    }
+    applyConfig({});
+  }
 
   function openMeetingModal(sIdx){
     currentShift=sIdx; editingId=null; mmHint.textContent='';
@@ -674,38 +734,35 @@
   function makeDemandBlock(){
     const wrap = document.createElement('div');
     wrap.className = 'cell demand';
+    const demandPrograms = PROGRAMS.filter(p => p !== 'IDLE');
     wrap.innerHTML = `
       <div class="row">
         <h3>Weekly Demand — Remaining</h3>
         <div class="demand-cards">
-          ${['A','B','C','D'].map(k=>`
-            <div class="dcard themed" data-k="${k}" style="--theme:${PALETTE[k].theme};--theme-soft:${PALETTE[k].soft}">
+          ${demandPrograms.map(k=>{
+            const theme = PALETTE[k]?.theme || '#6aa3ff';
+            const soft = PALETTE[k]?.soft || 'rgba(106,163,255,.20)';
+            if (!PALETTE[k]) PALETTE[k] = { theme, soft };
+            return `
+            <div class="dcard themed" data-k="${k}" style="--theme:${theme};--theme-soft:${soft}">
               <div class="d-top">
                 <span class="d-val" id="rem-${k}">0</span>
                 <span class="d-tag colored">${k}</span>
               </div>
-              <div class="d-small"><span id="prod-${k}">${PRODUCED_SO_FAR[k]}</span> parts produced this week</div>
-            </div>
-          `).join('')}
+              <div class="d-small"><span id="prod-${k}">${PRODUCED_SO_FAR[k] ?? 0}</span> parts produced this week</div>
+            </div>`;
+          }).join('')}
         </div>
       </div>
     `;
 
-    // cache refs
-    demandRefs.A = wrap.querySelector('#rem-A');
-    demandRefs.B = wrap.querySelector('#rem-B');
-    demandRefs.C = wrap.querySelector('#rem-C');
-    demandRefs.D = wrap.querySelector('#rem-D');
-
-    demandCards.A = wrap.querySelector('[data-k="A"]');
-    demandCards.B = wrap.querySelector('[data-k="B"]');
-    demandCards.C = wrap.querySelector('[data-k="C"]');
-    demandCards.D = wrap.querySelector('[data-k="D"]');
+    demandRefs = Object.fromEntries(demandPrograms.map(k => [k, wrap.querySelector(`#rem-${k}`)]));
+    demandCards = Object.fromEntries(demandPrograms.map(k => [k, wrap.querySelector(`[data-k="${k}"]`)]));
     return wrap;
   }
 
   function sumAssignedByProgram(){
-    const acc = {A:0,B:0,C:0,D:0};
+    const acc = Object.fromEntries(PROGRAMS.map(p => [p, 0]));
     for (let sIdx = 0; sIdx < SHIFTS.length; sIdx++){
       for (const mId of MACHINES){
         const st = state[sIdx][mId];
@@ -720,22 +777,17 @@
 
   function refreshDemand(){
     const assigned = sumAssignedByProgram();
-    const remA = Math.max(0, (WEEKLY_DEMAND.A|0) - assigned.A);
-    const remB = Math.max(0, (WEEKLY_DEMAND.B|0) - assigned.B);
-    const remC = Math.max(0, (WEEKLY_DEMAND.C|0) - assigned.C);
-    const remD = Math.max(0, (WEEKLY_DEMAND.D|0) - assigned.D);
-
-    if(demandRefs.A){ demandRefs.A.textContent = remA; }
-    if(demandRefs.B){ demandRefs.B.textContent = remB; }
-    if(demandRefs.C){ demandRefs.C.textContent = remC; }
-    if(demandRefs.D){ demandRefs.D.textContent = remD; }
-
-    // titles info
-    if(demandRefs.A) demandRefs.A.parentElement.parentElement.title = `Assigned A: ${assigned.A} / Demand: ${WEEKLY_DEMAND.A}`;
-    if(demandRefs.B) demandRefs.B.parentElement.parentElement.title = `Assigned B: ${assigned.B} / Demand: ${WEEKLY_DEMAND.B}`;
-    if(demandRefs.C) demandRefs.C.parentElement.parentElement.title = `Assigned C: ${assigned.C} / Demand: ${WEEKLY_DEMAND.C}`;
-    if(demandRefs.D) demandRefs.D.parentElement.parentElement.title = `Assigned D: ${assigned.D} / Demand: ${WEEKLY_DEMAND.D}`;
+    Object.keys(demandRefs || {}).forEach(k => {
+      const rem = Math.max(0, (WEEKLY_DEMAND[k] || 0) - (assigned[k] || 0));
+      if(demandRefs[k]){
+        demandRefs[k].textContent = rem;
+        demandRefs[k].parentElement.parentElement.title = `Assigned ${k}: ${assigned[k] || 0} / Demand: ${WEEKLY_DEMAND[k] || 0}`;
+      }
+    });
   }
+
+  // Kick off initialization
+  loadConfigAndInit();
 </script>
 </body>
 </html>

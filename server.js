@@ -266,7 +266,7 @@ app.get('/api/config', (req, res) => {
 
 // Interface to define and assign daily objectives per ply cutter.
 app.get('/production-setup', (req, res) => {
-    res.sendFile(__dirname + '/public/production_plycutter_setup.html');
+    res.sendFile(__dirname + '/public/production_setup.html');
 });
 
 // Displays live machine statuses (e.g. UP/DOWN, help needed).
