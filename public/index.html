@@ -1,0 +1,388 @@
+<!--
+  index.html - CONFIDENTIAL - PROPERTY OF PARETOPS
+
+  Please contact support@paretops.com for support, feedback, or bug reporting.
+
+  DESCRIPTION:
+  This is the main landing page of the ParetOPS dashboard for manufacturing operations.
+  It provides a streamlined entry point for users to access key functional areas:
+  Leader, Production, and Maintenance dashboards.
+
+  PURPOSE:
+  - Serve as the user gateway to the full ParetOPS application suite.
+  - Route users based on their role or purpose (e.g. shift management, operations, or maintenance).
+  - Establish visual branding and provide product metadata.
+
+  FEATURES:
+  - Interactive button panel with Socket.IO integration for event tracking.
+  - Responsive and styled layout using Bootstrap 4.5.
+  - Fixed-position help button for quick access to support.
+  - Footer with version and ownership information.
+
+  DEPLOYMENT:
+  - Located at /public/index.html and served as the root entrypoint (`/`) of the Express server.
+  - Assets such as logos and favicons must be available in the `/public/images` directory.
+  - Requires backend support for socket event logging and page redirection.
+
+  DEPENDENCIES:
+  - Bootstrap 4.5 (CSS/JS)
+  - Font Awesome for icons
+  - Socket.IO for frontend-backend event communication
+  - utils.js for shared JS functions
+
+  AUTHOR:
+  Paulin Colin BANCKAERT — Dashboard version 3.0.0
+
+  VERSIONING:
+  - Managed under Git source control. Use semantic version tags (vX.X.X).
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ParetOPS Core</title>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+  <link rel="icon" type="image/png" href="/favicon.png">
+
+  <!-- Socket.IO -->
+  <script src="/socket.io/socket.io.js"></script>
+
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      background-color: #f4f7fc;
+      color: #333;
+      text-align: center;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: auto;
+      padding: 40px 20px;
+    }
+
+    /* ✅ Title Styling (kept from your original, even if unused here) */
+    h1 {
+      font-size: 2.8em;
+      font-weight: bold;
+      color: #0056b3;
+      margin-bottom: 15px;
+    }
+
+    p {
+      font-size: 1.3em;
+      color: #666;
+    }
+
+    /* ✅ Dashboard Card Styling */
+    .dashboard-card {
+      background: #ffffff;
+      padding: 30px;
+      border-radius: 15px;
+      box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+      margin-bottom: 25px;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .dashboard-card:hover {
+      transform: scale(1.03);
+      box-shadow: 0px 6px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    /* ✅ Button Styling */
+    .btn {
+      width: 250px;
+      padding: 15px;
+      font-size: 1.2em;
+      font-weight: bold;
+      border-radius: 10px;
+      transition: all 0.3s ease;
+    }
+
+    .btn-dark:hover { background-color: #333; }
+    .btn-success:hover { background-color: #218838; }
+    .btn-warning:hover { background-color: #e0a800; }
+
+    /* ✅ Help Button */
+    .help-button {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      padding: 12px 15px;
+      border-radius: 50%;
+      font-size: 1.5em;
+      cursor: pointer;
+      transition: background-color 0.3s;
+      box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+      z-index: 1030;
+    }
+    .help-button:hover { background-color: #0056b3; }
+
+    /* ✅ Footer Styling */
+    .footer {
+      margin-top: 40px;
+      padding: 15px;
+      font-size: 0.9em;
+      background-color: #e9ecef;
+      color: #555;
+      border-radius: 8px;
+    }
+
+    /* ✅ Center Buttons */
+    .btn-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 15px;
+    }
+
+    /* (Kept from your original even though unused) */
+    :root {
+      /* Your original nested CSS block was non-standard; left untouched to preserve file parity */
+    }
+
+    /* === Compact Right-side What's New panel (overlay; no layout shift) === */
+    #wnPanel {
+      position: fixed;
+      right: 20px;
+      bottom: 100px;             /* sits above the Help FAB */
+      width: 300px;
+      max-width: 86vw;
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      box-shadow: 0 12px 28px rgba(0,0,0,.12);
+      z-index: 1049;
+      text-align: left;
+      overflow: hidden;
+    }
+    #wnPanel .wn-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 12px;
+      border-bottom: 1px solid #e5e7eb;
+      font-weight: 800;
+    }
+    #wnPanel .wn-body {
+      padding: 10px 12px;
+      max-height: 48vh;          /* 📌 smaller and less imposing */
+      overflow: auto;
+    }
+    #wnPanel .wn-item { margin: .4rem 0; line-height: 1.35; }
+    #wnPanel .tag {
+      display: inline-block; font-size: .75rem; font-weight: 700;
+      padding: .05rem .4rem; border-radius: .35rem; margin-right: .35rem;
+      border: 1px solid transparent;
+    }
+    #wnPanel .tag.new { color: #28a745; background: rgba(40,167,69,.08); border-color: rgba(40,167,69,.25); }
+    #wnPanel .tag.improved { color: #6610f2; background: rgba(102,16,242,.08); border-color: rgba(102,16,242,.25); }
+
+    #wnCloseBtn {
+      border: 1px solid #e5e7eb; background: #fff; border-radius: 8px;
+      padding: 2px 8px; font-weight: 700; cursor: pointer; line-height: 1.2;
+    }
+
+    /* Small handle shown when panel is closed */
+    #wnHandle {
+      position: fixed;
+      right: 20px;
+      bottom: 100px;
+      background: #0ea5e9; color: #fff; border: none; border-radius: 999px;
+      padding: 8px 10px;
+      box-shadow: 0 8px 20px rgba(0,0,0,.18);
+      z-index: 1048;
+      cursor: pointer; font-weight: 700;
+      display: none;
+    }
+
+    /* Responsive nudge for smaller screens */
+    @media (max-width: 420px) {
+      #wnPanel { right: 12px; bottom: 90px; width: 86vw; }
+      #wnHandle { right: 12px; bottom: 90px; }
+    }
+
+    /* Shiny animated button */
+    #wnHandle {
+    position: fixed;
+    right: 20px;
+    bottom: 100px;
+    background: linear-gradient(90deg, #0ea5e9, #0284c7);
+    color: #fff;
+    border: none;
+    border-radius: 999px;
+    padding: 10px 16px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 6px 18px rgba(0,0,0,.2);
+    z-index: 1048;
+    display: none;
+    overflow: hidden;
+    }
+
+    /* Shiny sweep animation */
+    #wnHandle::before {
+    content: "";
+    position: absolute;
+    top: 0; left: -75%;
+    width: 50%; height: 100%;
+    background: linear-gradient(120deg, rgba(255,255,255,.5) 0%, rgba(255,255,255,0) 100%);
+    transform: skewX(-20deg);
+    }
+
+    #wnHandle:hover::before {
+    animation: shine 1.2s forwards;
+    }
+
+    @keyframes shine {
+    100% { left: 125%; }
+    }
+
+  </style>
+</head>
+<body>
+
+
+  <div class="container">
+    <!-- ✅ Page Title / Branding (exactly as in your original) -->
+    <img src="/images/paretops.svg" alt="Pareto OPS">
+    <p>Company Portal : <strong id="companyName">—</strong></p>
+    <p>Department : <strong id="departmentName">—</strong></p>
+
+
+    <!-- ✅ Dashboard Section (unchanged) -->
+    <div class="dashboard-card">
+      <div class="btn-container">
+        <button id="leaderButton" class="btn btn-dark"><i class="fas fa-user-tie"></i> Leader</button>
+        <button id="productionButton" class="btn btn-success"><i class="fas fa-cogs"></i> Production</button>
+        <button id="maintenanceButton" class="btn btn-warning"><i class="fas fa-tools"></i> Maintenance</button>
+      </div>
+    </div>
+
+    <!-- ✅ Software Info (unchanged) -->
+    <footer class="footer" style="text-align: center; padding: 2rem; background-color: #e9ecef; border-radius: 12px;">
+      <p style="margin: 0.5rem 0; color: #444; font-size: 1.1rem;">
+        &copy; 2025 <span style="font-weight: 700;">ParetOPS Core</span><sup style="font-size: 0.75em;">®</sup>. All Rights Reserved.
+      </p>
+      <p style="margin: 0.5rem 0; color: #444; font-size: 1.1rem;">
+        Version alpha |
+        <a href="https://www.paretops.com" target="_blank" style="color: #2a6ebb; text-decoration: none;">
+          www.paretops.com
+        </a>
+      </p>
+    </footer>
+  </div>
+
+  <!-- ✅ Help Button (unchanged behavior) -->
+  <button class="help-button" onclick="openHelp()"><i class="fas fa-question-circle"></i></button>
+
+  <!-- ✅ Compact Right-side What's New (overlay, no layout shift) -->
+  <aside id="wnPanel" aria-label="What's New">
+    <div class="wn-header">
+      <span>What's new?</span>
+      <button id="wnCloseBtn" aria-label="Close">✕</button>
+    </div>
+    <div class="wn-body">
+      <div class="wn-item"><span class="tag new">New</span> Added <strong>Performance Dashboard</strong> for viewing production and maintenance KPIs.</div>
+      <div class="wn-item"><span class="tag new">New</span> <strong>Automatic cycle time calculation</strong> for each product.</div>
+      <div class="wn-item"><span class="tag new">New</span> <strong>Real-time tracking</strong> of 15 KPIs.</div>
+      <div class="wn-item"><span class="tag new">New</span> <strong>Live maintenance monitoring</strong> screen.</div>
+      <div class="wn-item"><span class="tag new">New</span> <strong>Ply cutter benchmarking</strong> dashboard to guide upgrades based on historical data.</div>
+      <div class="wn-item"><span class="tag improved">Improved</span> <strong>Real-time production monitoring</strong> screens for clearer and faster updates.</div>
+    </div>
+  </aside>
+  <button id="wnHandle" title="Open What's New">ParetOPS v3 is here ✨</button>
+
+  <!-- JavaScript -->
+   <script>
+      const APP_ENV = "<%= appEnv %>"; // injecté depuis backend
+      if (APP_ENV === "dev") {
+        document.write(`
+          <div style="background-color: red; color: white; padding: 10px; text-align: center; font-weight: bold; font-size: 18px;">
+            ⚠️ WARNING: You are using the <u>DEVELOPMENT VERSION</u> of ParetOPSCore – Not Production - Not Test ⚠️
+          </div>
+        `);
+      }
+    </script>
+
+  <script>
+    // Initialize Socket.IO connection (unchanged)
+    const socket = io();
+
+    // Redirection logic (unchanged)
+    document.getElementById('leaderButton').onclick = () => {
+      socket.emit('buttonPress', 'leader');
+      console.log('Leader button clicked');
+      window.location.href = '/login.html';
+    };
+
+    document.getElementById('productionButton').onclick = () => {
+      socket.emit('buttonPress', 'production');
+      console.log('Production button clicked');
+      window.location.href = '/production.html';
+    };
+
+    document.getElementById('maintenanceButton').onclick = () => {
+      socket.emit('buttonPress', 'maintenance');
+      console.log('Maintenance button clicked');
+      window.location.href = '/maintenance.html';
+    };
+
+    // ✅ Help Button Function (unchanged)
+    function openHelp() {
+      alert("For support or feedback, contact ParetOPS at contact@paretops.com");
+    }
+
+    // ✅ Compact What's New panel controls (no persistence; overlay)
+    (function initCompactWn(){
+      const panel = document.getElementById('wnPanel');
+      const handle = document.getElementById('wnHandle');
+      const closeBtn = document.getElementById('wnCloseBtn');
+
+      function openPanel(){
+        panel.style.display = 'block';
+        handle.style.display = 'none';
+      }
+      function closePanel(){
+        panel.style.display = 'none';
+        handle.style.display = 'inline-block';
+      }
+
+      closeBtn.addEventListener('click', closePanel);
+      handle.addEventListener('click', openPanel);
+
+      // Always visible on load
+      openPanel();
+    })();
+
+    // ====== Load company configuration (name, department) ======
+    fetch('/api/config')
+      .then(res => res.json())
+      .then(cfg => {
+        if (cfg.company) {
+          document.getElementById('companyName').textContent =
+            cfg.company.name || 'Unknown Company';
+
+          document.getElementById('departmentName').textContent =
+            cfg.company.department || '';
+        }
+      })
+      .catch(err => {
+        console.error('Failed to load company config', err);
+      });
+
+  </script>
+
+  <!-- Bootstrap JS (kept exactly as in your original) -->
+  <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.2/dist/umd/popper.min.js"></script>
+  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+  <script src="/js/utils.js"></script>
+</body>
+</html>

@@ -1,0 +1,186 @@
+<!--
+  maintenance.html - CONFIDENTIAL - PROPERTY OF PARETOPS
+
+  For technical support or configuration requests, contact support@paretops.com
+
+  DESCRIPTION:
+  This HTML file provides the main interface for maintenance operators within the ParetOPS platform.
+  It allows quick access to the individual maintenance pages of each ply cutter on the shop floor.
+
+  PURPOSE:
+  - Offer a fast and intuitive way to access maintenance logs and reports for each machine.
+  - Serve as the entry point to detailed planned/unplanned maintenance operations.
+  - Ensure responsive navigation and visual consistency with the rest of the ParetOPS system.
+
+  FEATURES:
+  - Grid layout of large clickable buttons for each active ply cutter.
+  - Automatic routing to the appropriate `maintenance_screen/:plyCutter` endpoint.
+  - Clean UI using Bootstrap and custom CSS.
+  - Home button for navigation back to the root menu.
+
+  DEPLOYMENT:
+  - This file is served from `/public/maintenance.html`.
+  - Linked from the main index and leader dashboard as the operator maintenance entry point.
+  - Navigation relies on `data-ply-cutter` attributes and JS redirection.
+
+  DEPENDENCIES:
+  - Bootstrap 4.5 and Font Awesome for layout and iconography.
+  - JavaScript helper script `/js/utils.js`.
+
+  AUTHOR:
+  Paulin Colin BANCKAERT — Maintenance interface version 3.0.0
+
+  VERSIONING:
+  - Version-controlled under Git. Update when machines are added, removed, or design changes occur.
+-->
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maintenance Portal</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <link rel="icon" type="image/png" href="/favicon.png">
+
+    <style>
+        body {
+            background-color: #f4f7fc;
+            font-family: 'Roboto', Arial, sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* ✅ Title Styling */
+        h1 {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #0056b3;
+            margin-top: 30px;
+            margin-bottom: 20px;
+        }
+
+        /* ✅ Container for Buttons */
+        .container-buttons {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            max-width: 600px;
+            margin: auto;
+            padding: 20px;
+        }
+
+        /* ✅ Button Styling */
+        .btn-square {
+            width: 120px;
+            height: 120px;
+            background-color: #007bff;
+            color: white;
+            font-size: 1.5rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 12px;
+            transition: all 0.2s ease-in-out;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn-square:hover {
+            background-color: #0056b3;
+            transform: scale(1.1);
+            box-shadow: 0px 6px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        /* ✅ Home Button */
+        .home-button {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background-color: #343a40;
+            color: white;
+            padding: 10px 12px;
+            border-radius: 6px;
+            font-size: 1.1rem;
+            text-decoration: none;
+            transition: background-color 0.2s ease-in-out;
+            box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .home-button:hover {
+            background-color: #1d2124;
+        }
+
+        /* ✅ Footer */
+        .footer {
+            margin-top: 30px;
+            padding: 10px;
+            font-size: 0.9rem;
+            background-color: #e9ecef;
+            color: #555;
+            border-radius: 8px;
+            max-width: 600px;
+            margin: auto;
+        }
+    </style>
+</head>
+<body>
+    
+    <!-- ✅ Home Button -->
+    <a href="/" class="home-button"><i class="fas fa-home"></i> Home</a>
+
+    <!-- ✅ Title -->
+    <h1>Select a Ply Cutter for Maintenance</h1>
+
+    <!-- ✅ Maintenance Ply Cutter Buttons -->
+    <div class="container-buttons" id="machineContainer"></div>
+
+
+    <!-- ✅ Footer -->
+    <footer class="footer" style="text-align: center; padding: 2rem; background-color: #e9ecef; border-radius: 12px; margin-top: 2rem;">
+        <p style="margin: 0.5rem 0; color: #444; font-size: 1.1rem;">
+          &copy; 2025 <span style="font-weight: 700;">ParetOPS</span><sup style="font-size: 0.75em;">®</sup>. All Rights Reserved.
+        </p>
+        <p style="margin: 0.5rem 0; color: #444; font-size: 1.1rem;">
+          Version 3.0.2 |
+          <a href="https://www.paretops.com" target="_blank" style="color: #2a6ebb; text-decoration: none;">
+            www.paretops.com
+          </a>
+        </p>
+    </footer>
+      
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const res = await fetch('/api/config');
+                const cfg = await res.json();
+
+                const machines = cfg.machines || [];
+                const container = document.getElementById('machineContainer');
+
+                machines.forEach(machine => {
+                    const btn = document.createElement('button');
+                    btn.className = 'btn btn-square';
+                    btn.textContent = machine;
+                    btn.dataset.plyCutter = machine;
+
+                    btn.addEventListener('click', () => {
+                        window.location.href = `/maintenance_screen/${machine}`;
+                    });
+
+                    container.appendChild(btn);
+                });
+            } catch (err) {
+                console.error('❌ Failed to load config', err);
+            }
+        });
+        </script>
+
+    <script src="/js/utils.js"></script>
+</body>
+</html>

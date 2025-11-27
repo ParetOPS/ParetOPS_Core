@@ -1,0 +1,38 @@
+{
+  "company": {
+    "name": "ParetOPS Core Manufacturing",
+    "department": "Production"
+  },
+
+  "machines": [
+    "M1","M2","M3","M4","M5","M6","M7","M8"
+  ],
+
+  "shifts": 3,
+
+  "productionSetup": {
+    "programs": {
+      "A": {
+        "baseObjective": 12,
+        "floaterObjective": 14
+      },
+      "B": {
+        "baseObjective": 10,
+        "floaterObjective": 12
+      },
+      "C": {
+        "baseObjective": 8,
+        "floaterMultiplier": 1.2
+      },
+      "D": {
+        "baseObjective": 6,
+        "floaterMultiplier": 1.15
+      },
+      "E": {
+        "baseObjective": 5
+      }
+    },
+
+    "traineeReductionFactor": 0.7
+  }
+}

@@ -1,0 +1,1499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Production Screen</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        body {
+            font-size: 1.5em; /* Diminuer la police pour rendre le tout plus compact */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh; /* Prend toute la hauteur de l'écran */
+            margin: 0; /* Supprime les marges par défaut */
+            overflow: hidden; /* Empêche les barres de défilement */
+            background-color: #f8f9fa; /* Couleur de fond optionnelle */
+        }
+
+        .zoom-container {
+            width: 100%; /* Largeur originale du contenu */
+            transform: none; /* Appliquer un zoom de x% par défaut */
+            transform-origin: none; /* Nécessaire pour un bon comportement de l'échelle */
+            zoom: reset;
+        }
+
+        .container {
+            text-align: center;
+            margin-bottom: 20px; /* Maintenir la même marge en bas que en haut */
+        }
+
+        .counter {
+            font-size: 2.3em;
+            margin-bottom: 20px;
+        }
+
+        .rectangle {
+            border: 2px solid #000;
+            padding: 20px;
+            margin: 10px;
+            display: inline-block;
+            width: 250px;
+            text-align: center;
+        }
+
+        .button-container {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            margin: 20px 0; /* Diminuer la marge pour rendre le tout plus compact */
+        }
+
+        .btn-secondary, .btn-danger, .btn-info {
+            font-size: 0.7em; /* Diminuer la police pour rendre le tout plus compact */
+            padding: 10px 20px;
+            width: 250px;
+            margin: 20px;
+        }
+
+        .button-group {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .button-round {
+            position: relative;
+            border-radius: 50%;
+            width: 200px;
+            height: 200px;
+            font-size: 2em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: white;
+            transition: all 0.3s ease-in-out;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+            border: none;
+        }
+
+        /* +1 Button (Green but Less Intense) */
+        .btn-success {
+            background: linear-gradient(to bottom, #4CAF50, #388E3C);
+        }
+
+        /* Report Issue Button (Refined Blue) */
+        .btn-primary {
+            background: linear-gradient(to bottom, #4267B2, #2E5A9C);
+        }
+
+        /* Call for Help Button (Deep Gold) */
+        .btn-warning {
+            background: linear-gradient(to bottom, #D4A017, #B88900);
+        }
+
+        /* Hover Effects for All */
+        .button-round:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .button-round:active {
+            transform: scale(0.95);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+
+
+
+        .button-label {
+            font-size: 0.8em;
+            color: black;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        #prod-counter-box.flash-red {
+            background-color: red;
+            transition: background-color 0.5s ease-out;
+        }
+
+        #prod-counter-box.flash-green {
+            background-color: green;
+            transition: background-color 0.5s ease-out;
+        }
+
+        #prod-counter-box.match-obj {
+            background-color: lightgreen;
+            animation: pulse 1s infinite alternate;
+        }
+
+        #prod-counter-box.exceed-obj {
+            background-color: gold;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            100% { transform: scale(1.05); }
+        }
+
+        .time {
+            font-size: 1.8em;
+            margin-bottom: 20px;
+        }
+
+        @keyframes flashRed {
+            0% { background-color: red; }
+            50% { background-color: white; }
+            100% { background-color: red; }
+        }
+
+        .flash-screen {
+            animation: flashRed 0.8s infinite !important;
+        }
+
+        #shift-info {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 50px;
+            margin-bottom: 20px;
+        }
+
+        #shutdown-overlay, #break-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw; /* Utilisation des unités viewport pour une couverture totale */
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            padding: 20px;
+            box-sizing: border-box; /* Inclut le padding dans la taille totale */
+        }
+
+        #shutdown-content {
+            background: #2c2c2c;
+            padding: 30px;
+            border-radius: 12px;
+            text-align: center;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        #report-issue-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw; /* Même logique pour une couverture complète */
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            z-index: 1000;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            padding: 20px;
+            overflow-y: auto; /* Conserve la possibilité de défiler si nécessaire */
+            box-sizing: border-box; /* Évite que le padding crée des décalages */
+        }
+
+
+        #shutdown-message, #report-issue-message {
+            color: #ffc107;
+            font-size: 1.8em;
+            margin-bottom: 20px;
+        }
+
+        #break-overlay button, #shutdown-overlay button, #report-issue-overlay button {
+            margin-top: 10px;
+            padding: 10px 20px;
+            font-size: 1em;
+            border-radius: 5px;
+        }
+
+        #shutdown-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .shutdown-btn {
+            padding: 12px 20px;
+            font-size: 1.2em;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            transition: 0.3s ease-in-out;
+            font-weight: bold;
+        }
+
+        .maintenance-btn {
+            background: linear-gradient(to bottom, #007bff, #0056b3);
+            color: white;
+        }
+
+        .cancel-btn {
+            background: linear-gradient(to bottom, #d9534f, #c9302c);
+            color: white;
+        }
+
+        .shutdown-btn:hover {
+            transform: scale(1.05);
+            opacity: 0.9;
+        }
+
+        #report-issue-overlay select, #report-issue-overlay textarea, #report-issue-overlay input {
+            font-size: 0.9em;
+            padding: 10px;
+            margin: 10px 0;
+            width: 90%;
+            max-width: 400px;
+        }
+
+        .progress-container {
+            width: 80%;
+            margin: 20px auto;
+            background-color: #e0e0e0;
+            border-radius: 25px;
+            overflow: hidden;
+            box-shadow: 0px 3px 6px rgba(0, 0, 0, 0.16);
+        }
+
+        .progress-bar {
+            height: 30px;
+            background: linear-gradient(to right, #28a745, #34ce57);
+            width: 0%;
+            color: white;
+            text-align: center;
+            line-height: 30px;
+            font-weight: bold;
+            transition: width 0.5s ease-in-out;
+        }
+
+        .align-center {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+        }
+
+        /* Main Issue Buttons (2x2 Grid) */
+        .issue-buttons {
+            display: flex; /* ✅ Force items to be in a single row */
+            justify-content: center; /* ✅ Center them horizontally */
+            gap: 12px; /* ✅ Add space between buttons */
+            flex-wrap: wrap; /* ✅ Ensures buttons don’t overflow on small screens */
+            width: 100%;
+            margin-bottom: -10px;
+        }
+
+
+        .issue-button {
+            font-size: 1.2em;
+            font-weight: bold;
+            padding: 12px;
+            border-radius: 8px;
+            background: linear-gradient(to bottom, #007bff, #0056b3);
+            color: white;
+            border: none;
+            transition: 0.3s;
+        }
+
+        .issue-button:hover {
+            background: linear-gradient(to bottom, #0056b3, #003d80);
+            transform: scale(1.05);
+        }
+
+        /* Sub-Options Buttons (Compact Grid) */
+        .sub-options-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 8px;
+            margin-top: -15px;
+            padding: 10px;
+        }
+
+        .sub-option-button {
+            font-size: 1em;
+            font-weight: bold;
+            padding: 10px;
+            border-radius: 6px;
+            background: linear-gradient(to bottom, #ffc107, #e0a800);
+            color: black;
+            border: none;
+            transition: 0.3s;
+        }
+
+        .sub-option-button:hover {
+            background: linear-gradient(to bottom, #e0a800, #c69500);
+            transform: scale(1.05);
+        }
+
+
+        #issues-table-body tr[style*="color: red"] td {
+            font-style: italic; /* Italicize the placeholder */
+            cursor: pointer; /* Make it clear that it's clickable */
+        }
+
+        #report-issue-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            line-height: 0.7; /* Reduce default spacing */
+        }
+
+        #report-issue-counter {
+            font-size: 1.5em; /* Adjust size if needed */
+            margin-bottom: -5px; /* Reduce space */
+        }
+
+        #report-label {
+            font-size: 0.1em;
+            margin-top: 10px; /* Reduce top margin */
+        }
+
+        .button-call {
+            background-color: #ff5733 !important; /* Change to any color */
+            color: white !important;
+            border: none;
+        }
+
+        #countdown-timer {
+            display: none;
+            position: relative; /* Keep it inside the overlay */
+            width: 100%; /* Ensure it takes full width */
+            text-align: center; /* Center text inside */
+            margin-top: 50px; /* Adjust this value to move it lower */
+            font-weight: bold;
+            background: #ffcc00;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-size: 1.2em;
+        }
+
+        /* Style for selected issue button */
+        .issue-button.selected {
+            background: linear-gradient(to bottom, #ff5733, #c0392b); /* Example: Change to red */
+            color: white;
+        }
+
+        /* Style for selected sub-option button */
+        .sub-option-button.selected {
+            background: linear-gradient(to bottom, #ff5733, #c0392b); /* Example: Change to orange */
+            color: black;
+        }
+        #fullscreen-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 999;
+            background: white;
+            border: none;
+            border-radius: 50%;
+            width: 56px;
+            height: 56px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.3s ease-in-out, box-shadow 0.3s;
+            padding: 0;
+        }
+
+        #fullscreen-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
+        }
+
+        #fullscreen-btn svg {
+            width: 24px;
+            height: 24px;
+            fill: black;
+        }
+
+
+
+
+    </style>
+</head>
+<body>
+    <div class="zoom-container">
+        <div class="container">
+            <!-- Ligne du haut avec l'heure, le shift, et le numéro du ply cutter -->
+            <div id="shift-info">
+                <div id="current-time" class="time"></div>
+                <div>Shift: <span id="shift-number">1</span></div>
+                <div>Ply Cutter: <span id="plyCutter"></span></div>
+                <div>Program: <span id="program-display">N/A</span></div>
+            </div>
+
+            <!-- OBJ et PROD encadrés côte à côte -->
+            <div class="row align-items-center justify-content-center" style="gap: 50px;">
+                <div class="rectangle">
+                    <span>OBJ: </span><span id="obj-counter">{{ obj }}</span>
+                </div>
+                <img src="/images/paretops.svg" alt="Pareto OPS" style="height: 60px;">
+                <div class="rectangle" id="prod-counter-box">
+                    <span>PROD: </span><span id="prod-counter">0</span>
+                </div>
+            </div>
+            
+
+            <!-- Barre de progression vers l'objectif -->
+            <div class="progress-container">
+                <div id="progress-bar" class="progress-bar">0%</div>
+            </div>
+
+            <!-- Trois gros boutons côte à côte avec les textes en dessous -->
+            <div class="button-container">
+                <div class="align-center">
+                    <div class="button-round btn btn-success" id="increase-prod-button" onclick="increaseProd()">
+                        +1
+                    </div>
+                    <div class="button-label">KIT READY</div>
+                </div>
+                <div class="align-center">
+                    <div class="button-round btn btn-primary" id="report-issue-button" onclick="toggleReportIssue()">
+                        <div id="report-issue-content">
+                            <span id="report-issue-counter">0</span><br>
+                            <span id="report-label" style="font-size: 0.5em;">No Reports</span>
+                        </div>
+                    </div>                
+                    <div class="button-label">REPORT AN ISSUE</div>
+                </div>
+                <div class="align-center">
+                    <div class="button-round button-call" onclick="triggerLeader()">
+                        CALL
+                    </div>                    
+                    <div class="button-label">HELP NEEDED</div>
+                </div>
+            </div>
+
+            <!-- Petits boutons de contrôle -->
+            <div class="button-container">
+                <button class="btn btn-secondary" onclick="goBack()">Back</button>
+                <button class="btn btn-danger" onclick="toggleShutdown()">Shutdown</button>
+                <button class="btn btn-info" onclick="toggleBreakLunch()">Break / Lunch</button>
+            </div>
+
+            <!-- Overlay for Break/Lunch -->
+            <div id="break-overlay">
+                <div id="break-message">Lunch / Break started at <span id="break-time"></span></div>
+                <button onclick="endBreakLunch()">Ply cutter back to production</button>
+            </div>
+
+            <!-- Overlay for Ply Cutter Down -->
+            <div id="shutdown-overlay">
+                <div id="shutdown-content">
+                    <h2 style="color: #ffc107; margin-bottom: 15px;">Ply Cutter Shutdown</h2>
+                    <p style="font-size: 1.2em; line-height: 1.5; color: #fff;">
+                        Please use this option <strong>only</strong> if the ply cutter is facing a <strong>major issue</strong>
+                        that prevents production and requires assistance from <strong>Maintenance</strong> or a <strong>Machine Specialist</strong>.
+                    </p>
+                    <div id="shutdown-buttons">
+                        <button class="shutdown-btn maintenance-btn" onclick="redirectToMaintenance()">Go to Maintenance Portal</button>
+                        <button class="shutdown-btn cancel-btn" onclick="endShutdown()">Cancel</button>
+                    </div>
+                </div>
+            </div>
+            
+            
+           
+
+            <div id="report-issue-overlay" style="display: none; justify-content: center; align-items: center;">
+                <div style="display: flex; width: 90%; max-width: 1400px; gap: 20px; align-items: flex-start;">
+                    
+                    <!-- Left Side: Issue Selection -->
+                    <div style="flex: 0.6; display: flex; flex-direction: column; align-items: center; background: #f8f9fa; padding: 15px; border-radius: 8px;">
+                        
+                        <!-- Issue Type Selection (2x2 Grid) -->
+                        <h3 style="font-weight: bold; color: #000; text-align: center;">Select Issue</h4>
+                            <div class="issue-buttons">
+                                <button class="issue-button" onclick="selectIssue(this, 'Machine')">Machine</button>
+                                <button class="issue-button" onclick="selectIssue(this, 'Program')">Program</button>
+                                <button class="issue-button" onclick="selectIssue(this, 'Material')">Material</button>
+                                <button class="issue-button" onclick="selectIssue(this, 'Team')">Team</button>
+                            </div>
+                
+
+                        <!-- Subcategory Selection (Now Compact) -->
+                        <div id="issue-sub-options" style="display: none; margin-top: 15px; text-align: center; width: 100%;"></div>
+
+
+            
+                        <!-- Downtime Input -->
+                        <div class="align-center" id="downtime-input" style="display: none; margin-top: -5px; width: 100%;">
+                            <label for="downtime" style="font-weight: bold; color: black;">Downtime (minutes)</label>
+                            <div style="display: flex; align-items: center; gap: 10px; justify-content: center; width: 100%;">
+                                <button onclick="decrementDowntime()" class="btn btn-outline-secondary">-</button>
+                                <input type="number" id="downtime" min="0" placeholder="DT" style="width: 100px; padding: 10px; text-align: center;">
+                                <button onclick="incrementDowntime()" class="btn btn-outline-secondary">+</button>
+                            </div>
+                        </div>
+
+                        <div class="align-center" id="issue-comment" style="display: none; margin-top: -10px; width: 100%; text-align: center;">
+                            <label for="comment" style="font-weight: bold; display: block; text-align: center; margin-bottom: 5px;">Comment</label>
+                            <textarea id="comment" rows="2" placeholder="Add any details (optional)" 
+                                      style="width: 80%; max-width: 400px; padding: 10px; display: block; margin: 0 auto;"></textarea>
+                        </div>
+                        
+            
+                        <!-- Submit and Cancel Buttons -->
+                        <div class="d-flex justify-content-center gap-2 mt-3" style="width: 100%;">
+                            <button id="submit-issue-button" class="btn btn-success" style="width: 48%; height: 50px;" onclick="submitIssue()">Submit</button>
+                            <button class="btn btn-secondary" style="width: 48%; height: 50px;" onclick="cancelReportIssue()">Cancel</button>
+                        </div>
+            
+                    </div> <!-- End of Left Section -->
+            
+                    <!-- Right Side: Reported Issues -->
+                    <div id="reported-issues-list" style="flex: 0.6; background-color: #e9ecef; padding: 20px; border-radius: 8px;">
+                        <h3 style="font-weight: bold; color: #000; text-align: center;">Reported Issues</h3>
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th style="width: 70%;">Type of Issue</th>
+                                    <th>Downtime (minutes)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="issues-table-body"></tbody>
+                        </table>
+                        <div id="total-downtime" style="margin-top: 20px; font-weight: bold; color: #000; text-align: center;">
+                            <strong>Total Downtime:</strong> <span id="total-downtime-value">0</span> minutes
+                        </div>
+
+                         <!-- Countdown Timer for Issue Reporting -->
+                    <div id="countdown-timer" style="text-align: center; margin-top: 15px; font-weight: bold; display: none;">Next report available in: 5m 0s</div>
+                    </div> <!-- End of Right Section -->
+            
+                </div> <!-- End of Main Container -->
+            </div> <!-- End of Overlay -->
+
+            
+            
+            
+                
+            
+
+        <script src="/socket.io/socket.io.js"></script>
+        <script>
+            const socket = io();
+            let floaterFlashing = false;
+            let floaterMenuVisible = false;
+            let lastIncreaseTime = 0; // Suivi du dernier moment où la production a augmenté
+            let lastSubmissionTime = 0;
+            let countdownInterval;
+
+
+            function updateTime() {
+                var now = new Date();
+                var timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                document.getElementById('current-time').innerText = timeString;
+            }
+            updateTime(); // Call immediately to display the time without delay
+            setInterval(updateTime, 1000);
+
+            function resetBrowserZoom() {
+                // Force le zoom du navigateur à 100%
+                document.body.style.zoom = "100%";
+                document.documentElement.style.zoom = "100%";
+            }
+
+            function optimizeZoom() {
+                const container = document.querySelector('.zoom-container');
+                const screenWidth = window.innerWidth;
+                const screenHeight = window.innerHeight;
+
+                const containerWidth = container.offsetWidth;
+                const containerHeight = container.offsetHeight;
+
+                // Calculate the optimal scale
+                const scaleX = screenWidth / containerWidth;
+                const scaleY = screenHeight / containerHeight;
+                const scale = Math.min(scaleX, scaleY);
+
+                // Apply the scale
+                container.style.transform = `scale(${scale})`;
+                container.style.transformOrigin = 'top left'; // Ensures proper scaling
+                container.style.position = 'absolute'; // Prevents alignment issues
+                container.style.left = '0';
+                container.style.top = '0';
+            }
+
+            // Call the function on load and resize
+            window.addEventListener('load', optimizeZoom);
+            window.addEventListener('resize', optimizeZoom);
+
+
+            // Function to get the current date in YYYY-MM-DD format
+            function getCurrentDate() {
+                const today = new Date();
+                return today.toISOString().split('T')[0]; // Returns the date in YYYY-MM-DD format
+            }
+
+
+            socket.on("shiftChanged", (data) => {
+                console.log("Shift changed to:", data.shift);
+                document.getElementById("shift-number").innerText = data.shift;
+                loadOBJ();  // Reload production objectives
+                loadProduction(); // Reload production data
+            });
+
+            socket.on('refreshRealTimeStatus', () => {
+                console.log("🔄 Received refresh event. Reloading production screen...");
+                fetchAndUpdateProductionScreen();
+            });
+
+            document.addEventListener('DOMContentLoaded', function() {
+                fetch("/api/get-current-shift")
+                    .then(response => response.json())
+                    .then(data => {
+                        document.getElementById("shift-number").innerText = data.shift;
+
+                        // Attendre que le shift soit bien mis à jour avant de récupérer l'OBJ
+                        loadOBJ();
+                        loadProduction();
+                        loadReportedIssues();
+                    })
+                    .catch(error => console.error("Error fetching shift data:", error));
+            });
+
+            function loadOBJ() {
+                const pathSegments = window.location.pathname.split('/');
+                const plyCutter = pathSegments[pathSegments.length - 1];
+
+                if (plyCutter) {
+                    document.getElementById('plyCutter').innerText = plyCutter;
+
+                    const currentShift = document.getElementById('shift-number').innerText.trim();
+                    const currentDay = getCurrentDate(); 
+
+                    console.log(`Fetching OBJ for plyCutter: ${plyCutter}, day: ${currentDay}, shift: ${currentShift}`);
+
+                    fetch(`/api/obj?plyCutter=${plyCutter}&day=${currentDay}&shift=${currentShift}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            console.log('API Response:', data);
+
+                            if (data.obj_value !== undefined) {
+                                document.getElementById('obj-counter').innerText = data.obj_value;
+                                updateProgressBar(parseInt(document.getElementById('prod-counter').innerText), data.obj_value);
+                            } else {
+                                document.getElementById('obj-counter').innerText = 'N/A';
+                            }
+
+                            if (data.program) {
+                                document.getElementById('program-display').innerText = data.program;
+                                updateProgressBar(parseInt(document.getElementById('prod-counter').innerText), data.obj_value);
+                            } else {
+                                document.getElementById('program-display').innerText = 'N/A';
+                            }
+                        })
+                        .catch(err => console.error('Error fetching OBJ or program:', err));
+                }
+            }
+
+
+            function increaseProd() {
+                const currentTime = new Date().getTime();
+                if (currentTime - lastIncreaseTime >= 1000) { // Prevents spamming
+                    const prodCounter = document.getElementById('prod-counter');
+                    const objCounter = document.getElementById('obj-counter');
+                    let currentProd = parseInt(prodCounter.innerText);
+                    const obj_value = parseInt(objCounter.innerText);
+
+                    console.log(`[PROD UPDATE] Before Increase:`, { currentProd, obj_value });
+
+                    currentProd += 1;
+                    prodCounter.innerText = currentProd;
+                    flashProdCounter('green');
+                    updateProgressBar(currentProd, obj_value);
+
+                    console.log(`[PROD UPDATE] After Increase:`, { currentProd, obj_value });
+
+                    const prodCounterBox = document.getElementById('prod-counter-box');
+                    if (currentProd === obj_value) {
+                        prodCounterBox.classList.add('match-obj');
+                        prodCounterBox.classList.remove('exceed-obj');
+                    } else if (currentProd > obj_value) {
+                        prodCounterBox.classList.add('exceed-obj');
+                        prodCounterBox.classList.remove('match-obj');
+                    } else {
+                        prodCounterBox.classList.remove('match-obj', 'exceed-obj');
+                        prodCounterBox.style.backgroundColor = ''; // Reset color
+                    }
+
+                    lastIncreaseTime = currentTime;
+
+                    // Send updated production count to backend
+                    console.log(`[API CALL] Sending Production Update for Ply Cutter: ${document.getElementById('plyCutter').innerText}`);
+                    sendProductionUpdate(currentProd);
+                }
+            }
+
+            function loadProduction() {
+                const plyCutter = document.getElementById('plyCutter').innerText.trim();
+                const currentShift = document.getElementById('shift-number').innerText.trim();
+                const currentDay = getCurrentDate();
+
+                fetch(`/api/get-prod-issues?plyCutter=${plyCutter}&day=${currentDay}&shift=${currentShift}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log("Production API Response:", data);
+
+                        // ✅ Use correct property name `prod_value` instead of `prod_value`
+                        if (data && data.prod_value !== undefined) {
+                            const prodCounter = document.getElementById('prod-counter');
+                            prodCounter.innerText = data.prod_value;
+
+                            // ✅ Update progress bar correctly
+                            updateProgressBar(data.prod_value, document.getElementById('obj-counter').innerText);
+                        } else {
+                            console.error("Error: PROD value is undefined.");
+                        }
+                    })
+                    .catch(err => console.error("Error fetching production data:", err));
+            }
+
+            function sendProductionUpdate(prod_value) {
+                const plyCutter = document.getElementById('plyCutter').innerText.trim();
+                const shift = document.getElementById('shift-number').innerText.trim();
+                const day = getCurrentDate();
+
+                const data = {
+                    plyCutter: plyCutter,
+                    shift: shift,
+                    day: day,
+                    prod_value: prod_value
+                };
+
+                console.log(`[API CALL] Sending production update:`, data);
+
+                fetch('/api/update-prod', {
+                 
+                 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                })
+                .then(response => {
+                    console.log(`[API RESPONSE] HTTP Status:`, response.status);
+                    return response.json();
+                })
+                .then(result => {
+                    console.log(`[API RESPONSE] Production update successful:`, result);
+                })
+                .catch(error => {
+                    console.error(`[API ERROR] Failed to update production:`, error);
+                });
+            }
+
+             function flashButtonRed() {
+                const button = document.getElementById('increase-prod-button');
+                button.style.backgroundColor = 'red';
+                setTimeout(() => {
+                    button.style.backgroundColor = ''; // Reset to original color
+                }, 500); // Button will flash red for 500ms
+            }
+
+            function updateProgressBar(currentProd, obj_value) {
+                var progressBar = document.getElementById('progress-bar');
+                var percentage = obj_value > 0 ? (currentProd / obj_value) * 100 : 0; // Allowing values beyond 100%
+
+                progressBar.style.width = percentage + '%';
+                progressBar.innerText = Math.round(percentage) + '%';
+
+                // Change color if production exceeds the objective
+                if (percentage >= 100) {
+                    progressBar.style.backgroundColor = 'red'; // Example: Change color when exceeding 100%
+                } else {
+                    progressBar.style.backgroundColor = 'green'; // Default color
+                }
+            }
+
+            function goBack() {
+                window.location.href = "/production.html";
+            }
+
+
+            function flashProdCounter(color) {
+                var prodCounterBox = document.getElementById('prod-counter-box');
+                if (color === 'red') {
+                    prodCounterBox.classList.add('flash-red');
+                } else if (color === 'green') {
+                    prodCounterBox.classList.add('flash-green');
+                }
+                setTimeout(function () {
+                    prodCounterBox.classList.remove('flash-red');
+                    prodCounterBox.classList.remove('flash-green');
+                }, 500);
+            }
+
+            function toggleFloaterOptions() {
+                if (floaterFlashing) {
+                    document.body.classList.remove('flash');
+                    floaterFlashing = false;
+                } else if (!floaterMenuVisible) {
+                    document.getElementById('floater-options').style.display = 'block';
+                    floaterMenuVisible = true;
+                }
+            }
+
+            let helpActive = false;
+
+            function triggerLeader() {
+                console.log("🔵 triggerLeader() function called!");
+
+                const plyCutterElement = document.getElementById('plyCutter');
+                if (!plyCutterElement) {
+                    console.error("❌ Error: 'plyCutter' element not found in DOM.");
+                    return;
+                }
+
+                const plyCutter = plyCutterElement.innerText.trim();
+                helpActive = !helpActive; // Toggle help status
+
+                const eventData = { 
+                    plyCutter: plyCutter, 
+                    helpRequested: helpActive 
+                };
+
+                console.log(`📡 Emitting WebSocket event with data:`, JSON.stringify(eventData, null, 2));
+
+                // Emit the event
+                socket.emit('helpRequested', eventData);
+
+                // 🔴 Flash the production screen
+                if (helpActive) {
+                    document.body.classList.add('flash-screen');
+                } else {
+                    document.body.classList.remove('flash-screen');
+                }
+            }
+
+
+
+
+
+
+            function CancelShutdown() {
+                document.getElementById('shutdown-overlay').style.display = 'none';
+            }
+
+            function redirectToMaintenance() {
+                window.location.href = "/maintenance.html"; 
+            }
+
+            function toggleBreakLunch() {
+                var breakOverlay = document.getElementById('break-overlay');
+                var breakTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                document.getElementById('break-time').innerText = breakTime;
+                breakOverlay.style.display = 'flex';
+            }
+
+            let shutdownStartTime = null;
+            let shutdownTimer = null;
+
+
+            function toggleShutdown() {
+                console.log("Shutdown button clicked");
+                document.getElementById('shutdown-overlay').style.display = 'flex';
+            }
+
+            function endShutdown() {
+                document.getElementById('shutdown-overlay').style.display = 'none';
+            }
+
+
+
+            function toggleReportIssue() {
+                var reportIssueOverlay = document.getElementById('report-issue-overlay');
+
+                // Vérifie si l'overlay est actuellement visible
+                if (window.getComputedStyle(reportIssueOverlay).display === "none") {
+                    reportIssueOverlay.style.display = "flex"; // Affiche l'overlay
+                } else {
+                    reportIssueOverlay.style.display = "none"; // Cache l'overlay
+                }
+            }
+
+            let selectedIssue = null;
+            let selectedSubOption = null;
+
+            function selectIssue(element, issueType) {
+                selectedIssue = issueType;
+                console.log("✅ Selected Issue:", selectedIssue);
+
+                // Remove 'selected' class from all issue buttons
+                document.querySelectorAll(".issue-button").forEach(btn => btn.classList.remove("selected"));
+
+                // Add 'selected' class to clicked button
+                element.classList.add("selected");
+
+                let subOptions = document.getElementById('issue-sub-options');
+                subOptions.style.display = "block";
+                subOptions.innerHTML = getSubOptions(issueType);
+            }
+
+
+            function getSubOptions(issueType) {
+                let options = "";
+                switch (issueType) {
+                    case "Machine":
+                        options = generateSubOptions([
+                            'Alignment', 'Pressure', 'Tape on blade or gantry', 'Hardware Fail', 'US deviations',
+                            'Horn', 'Video Jet', 'Drive Fault'
+                        ]);
+                        break;
+                    case "Program":
+                        options = generateSubOptions(['Missing Program', 'Other']);
+                        break;
+                    case "Material":
+                        options = generateSubOptions([
+                            'Quality defect in material', 'Material not ready', 'Other'
+                        ]);
+                        break;
+                    case "Team":
+                        options = generateSubOptions(['Meeting', 'ENG action', 'MAINT action', 'Other']);
+                        break;
+                }
+                return options;
+            }
+
+            function generateSubOptions(subOptions) {
+                return `
+                    <h4>Select an Issue Detail</h4>
+                    <div class="sub-options-container">
+                        ${subOptions.map(option => `
+                            <button class="sub-option-button" onclick="selectSubOption(this, '${option}')">${option}</button>
+                        `).join('')}
+                    </div>
+                `;
+            }
+
+            function selectSubOption(element, option) {
+                selectedSubOption = option;
+                console.log("✅ Selected Sub-Option:", selectedSubOption);
+
+                // Remove 'selected' class from all sub-option buttons
+                document.querySelectorAll("#issue-sub-options .sub-option-button").forEach(btn => btn.classList.remove("selected"));
+
+                // Add 'selected' class to clicked button
+                element.classList.add("selected");
+
+                // Ensure downtime input and comments are displayed
+                document.getElementById('downtime-input').style.display = 'block';
+                document.getElementById('issue-comment').style.display = 'block';
+            }
+          
+            let totalDowntime = 0;
+            let issueCount = 0;
+            let issueCooldownActive = false; // Global flag to track cooldown status
+
+            function submitIssue() {
+                console.log("Submit button clicked");
+                if (issueCooldownActive) {
+                    alert("You must wait before submitting another issue.");
+                    return;
+                }
+
+                console.log("Current selected issue before validation:", selectedIssue);
+
+                const submitButton = document.getElementById('submit-issue-button');
+                const issuesTableBody = document.getElementById('issues-table-body');
+                const totalDowntimeValue = document.getElementById('total-downtime-value');
+                const reportIssueCounter = document.getElementById('report-issue-counter');
+                const reportLabel = document.getElementById('report-label');
+
+                let downtimeInput = document.getElementById('downtime').value || "0";
+                let commentInput = document.getElementById('comment').value.trim();
+                let plyCutterNumber = document.getElementById('plyCutter').innerText.trim();
+                let currentTime = Date.now();
+
+                // ✅ Ensure an issue type is selected
+                if (!selectedIssue) { 
+                    console.log("Submitting issue. Current selected issue:", selectedIssue);
+                    alert("Please select an issue type before submitting.");
+                    return;
+                }
+
+                // ✅ Ensure a sub-option is selected
+                if (typeof selectedSubOption === "undefined" || selectedSubOption === null) {
+                    alert("Please select a sub-option before submitting.");
+                    return;
+                }
+
+                let issueDescription = `${selectedIssue} - ${selectedSubOption}`;
+                let downtimeValue = downtimeInput || "0"; 
+
+                console.log("Submitting issue:", issueDescription, "Downtime:", downtimeValue, "Comment:", commentInput);
+
+                // ✅ Add row to the "Reported Issues" table
+                addIssueToTable(issueDescription, downtimeValue, commentInput);
+
+                // ✅ Update downtime and issue count
+                updateTotalDowntime();
+                updateIssueCounter();
+
+                // ✅ Start 5-minute cooldown timer
+                issueCooldownActive = true;
+                submitButton.disabled = true;
+                startCountdown(300);
+
+                // ✅ Send data to backend
+                let issueData = {
+                    plyCutter: plyCutterNumber,
+                    shift: document.getElementById('shift-number').innerText.trim(), // Ensure shift is included
+                    issue_type: issueDescription,
+                    comment: commentInput,
+                    downtime: downtimeValue,
+                    date: new Date().toISOString().slice(0, 19).replace("T", " ")
+                };
+
+                fetch('/api/report-issue', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(issueData)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    console.log("✅ Issue saved successfully:", data);
+                    
+                    loadReportedIssues();
+                })
+                .catch(error => console.error("❌ Error saving issue:", error));
+
+                // ✅ Reset form and close overlay
+                resetIssueForm();
+                toggleReportIssue();    
+
+                // ✅ Re-enable button after cooldown
+                setTimeout(() => {
+                    issueCooldownActive = false;
+                    submitButton.disabled = false;
+                    console.log("Cooldown over, submit button re-enabled");
+                }, 300000); // 5 minutes in milliseconds
+            }
+
+
+            /**
+             * Adds the reported issue to the table.
+             */
+            function addIssueToTable(issueDescription, downtime, comment) {
+                const issuesTableBody = document.getElementById('issues-table-body');
+                if (!issuesTableBody) {
+                    console.error("❌ Error: 'issues-table-body' not found.");
+                    return;
+                }
+
+                const newRow = document.createElement('tr');
+                newRow.innerHTML = `<td>${issueDescription}</td><td>${downtime}</td><td>${comment || "No comment"}</td>`;
+                issuesTableBody.appendChild(newRow);
+            }
+
+            /**
+             * Updates the issue counter UI.
+             */
+             function updateIssueCounter(issueCount) {
+                const reportIssueCounter = document.getElementById('report-issue-counter');
+                const reportLabel = document.getElementById('report-label');
+
+                if (issueCount === 0) {
+                    reportIssueCounter.innerText = "0";
+                    reportLabel.innerText = "No Reports";
+                } else {
+                    reportIssueCounter.innerText = issueCount;
+                    reportLabel.innerText = issueCount === 1 ? "REPORT" : "REPORTS";
+                }
+            }
+
+
+            /**
+             * Starts a countdown timer for the next issue submission.
+             */
+             function startCountdown(seconds) {
+                let countdownElement = document.getElementById("countdown-timer");
+                if (!countdownElement) return;
+
+                clearInterval(countdownInterval); // Reset existing countdown
+                countdownElement.style.display = "block"; // Show countdown
+                updateCountdownDisplay(seconds);
+
+                countdownInterval = setInterval(() => {
+                    seconds--;
+                    updateCountdownDisplay(seconds);
+
+                    if (seconds <= 0) {
+                        clearInterval(countdownInterval);
+                        countdownElement.style.display = "none"; // Hide countdown
+                        document.getElementById('submit-issue-button').disabled = false; // Re-enable submission
+                    }
+                }, 1000);
+            }
+
+            /**
+             * Updates the countdown display.
+             */
+            function updateCountdownDisplay(seconds) {
+                let countdownElement = document.getElementById("countdown-timer");
+                if (!countdownElement) return;
+
+                let minutes = Math.floor(seconds / 60);
+                let remainingSeconds = seconds % 60;
+                countdownElement.innerText = `Next report available in: ${minutes}m ${remainingSeconds}s`;
+            }
+
+            /**
+             * Resets the issue reporting form.
+             */
+            function resetIssueForm() {
+                console.log("Resetting issue form..."); 
+
+                document.getElementById('downtime').value = "";
+                document.getElementById('comment').value = "";
+
+                document.getElementById('issue-comment').style.display = 'none';
+                document.getElementById('downtime-input').style.display = 'none';
+
+                let subOptions = document.getElementById('issue-sub-options');
+                if (subOptions) {
+                    subOptions.style.display = 'none';
+                }
+
+                console.log("✅ Issue form reset completed.");
+            }
+
+            document.addEventListener('DOMContentLoaded', function () {
+                    const downtimeInput = document.getElementById('downtime');
+                    const submitButton = document.getElementById('submit-issue-button');
+                    const issueSubOptions = document.getElementById('issue-sub-options');
+                    const issueComment = document.getElementById('issue-comment');
+                    const downtimeInputContainer = document.getElementById('downtime-input');
+
+                    // Store the last submission time
+                    let lastSubmissionTime = 0;
+                    let countdownInterval; // Variable to store the interval
+                    const countdownElement = document.createElement('div'); // Create the countdown display
+
+                    // Append countdown display to the page (e.g., near the "Report an Issue" button)
+                    document.body.appendChild(countdownElement);
+                    countdownElement.style.position = "fixed";
+                    countdownElement.style.bottom = "20px";
+                    countdownElement.style.left = "50%";
+                    countdownElement.style.transform = "translateX(-50%)";
+                    countdownElement.style.background = "#ffcc00";
+                    countdownElement.style.padding = "10px 20px";
+                    countdownElement.style.borderRadius = "5px";
+                    countdownElement.style.fontSize = "1.2em";
+                    countdownElement.style.display = "none"; // Initially hidden
+
+            });
+            
+            function incrementDowntime() {
+                const downtimeInput = document.getElementById('downtime');
+                downtimeInput.value = parseInt(downtimeInput.value || 0) + 1;
+            }
+
+            function decrementDowntime() {
+                const downtimeInput = document.getElementById('downtime');
+                downtimeInput.value = Math.max(0, parseInt(downtimeInput.value || 0) - 1);
+            }
+
+            function cancelReportIssue() {
+                document.getElementById('report-issue-overlay').style.display = 'none';
+                document.getElementById('comment').value = "";
+                document.getElementById('downtime').value = "";
+                document.getElementById('issue-comment').style.display = 'none';
+                document.getElementById('downtime-input').style.display = 'none';
+            }
+
+            function updateTotalDowntime() {
+                const issuesTableBody = document.getElementById('issues-table-body');
+                const totalDowntimeValue = document.getElementById('total-downtime-value');
+                let totalDowntime = 0;
+
+                // Parcourir toutes les lignes du tableau
+                Array.from(issuesTableBody.rows).forEach(row => {
+                    const downtimeCell = row.cells[1]; // Deuxième colonne = Downtime
+                    const downtime = parseInt(downtimeCell.textContent) || 0;
+                    totalDowntime += downtime;
+                });
+                  totalDowntimeValue.innerText = totalDowntime;
+            }
+
+            function deleteRow(rowIndex) {
+                const issuesTableBody = document.getElementById('issues-table-body');
+                issuesTableBody.deleteRow(rowIndex); // Supprime la ligne
+                updateTotalDowntime(); // Recalcul du total
+            }
+
+
+            document.addEventListener('DOMContentLoaded', function () {
+                const issuesTableBody = document.getElementById('issues-table-body');
+
+                // Surveiller les changements dans le tableau
+                issuesTableBody.addEventListener('input', function (event) {
+                    const target = event.target;
+
+                    // Si une cellule éditable (par exemple, "Downtime") est modifiée
+                    if (target.tagName === 'TD' && target.cellIndex === 1) { // Vérifie que c'est la 2e colonne (Downtime)
+                        updateTotalDowntime(); // Recalculer immédiatement le total
+                    }
+                });
+
+                // Gérer les changements après focus perdu (blur)
+                issuesTableBody.addEventListener('blur', function (event) {
+                    const target = event.target;
+
+                    if (target.tagName === 'TD' && target.cellIndex === 1) {
+                        updateTotalDowntime(); // Recalculer après modification
+                    }
+                }, true); // Utiliser `true` pour capturer les événements `blur`
+            });
+
+            function endBreakLunch() {
+                document.getElementById('break-overlay').style.display = 'none';
+            }
+
+      
+            function handleEndOfShift(plyCutter) {
+                const currentShift = getCurrentShift(); // Retrieve current shift (shift1, shift2, etc.)
+                const currentDay = getCurrentDate(); // Retrieve current day (Monday, Tuesday, etc.)
+
+                // Send request to server to get the next shift's OBJ
+                fetch(`/api/next-shift-obj?plyCutter=${plyCutter}&day=${currentDay}&currentShift=${currentShift}`)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Failed to fetch next shift OBJ');
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        const nextobj_value = data.obj_value;
+                        // Update the OBJ display on the production screen
+                        document.querySelector(`#obj-display-${plyCutter}`).textContent = nextobj_value;
+
+                        console.log(`Next Shift OBJ Value: ${nextobj_value}`);
+                    })
+                    .catch(error => {
+                        console.error('Error fetching next shift OBJ:', error);
+                    });
+            }
+
+            // Écoute les mises à jour OBJ en temps réel
+            socket.on('objUpdated', (data) => {
+                console.log('Received objUpdated:', data); // Vérifie si les données arrivent
+                const plyCutterNumber = document.getElementById('plyCutter').innerText;
+
+                if (data.plyCutter === plyCutterNumber) {
+                    document.getElementById('obj-counter').innerText = data.obj_value;
+                    updateProgressBar(0, data.obj_value); // Mets à jour la barre de progression
+                }
+            });
+
+            socket.on('helpRequested', (data) => {
+                console.log(`🚨 Help requested for ${data.plyCutter}:`, data.helpRequested);
+
+                let body = document.body;
+
+                if (data.helpRequested) {
+                    console.log("🔴 Applying full-screen blinking effect...");
+                    
+                    body.classList.add("flash-screen");
+
+                    // Force reflow to ensure the animation applies
+                    void body.offsetWidth;
+                    
+                } else {
+                    console.log("✅ Removing full-screen blinking effect...");
+                    
+                    body.classList.remove("flash-screen");
+
+                    // Force reflow again to reset the effect
+                    void body.offsetWidth;
+                }
+            });
+
+
+
+            document.addEventListener('DOMContentLoaded', function () {
+                const issuesTableBody = document.getElementById('issues-table-body');
+
+                issuesTableBody.addEventListener('click', function (event) {
+                    const target = event.target;
+
+                    // Check if the clicked cell is part of a "Shutdown" row
+                    if (target.tagName === 'TD' && target.contentEditable === "true") {
+                        const currentValue = target.innerText;
+
+                        // If the cell is empty or contains the "Add details" placeholder, allow editing
+                        if (currentValue === '' || currentValue === 'Add details') {
+                            const input = document.createElement('input');
+                            input.type = 'text';
+                            input.placeholder = 'Add details'; // Placeholder for guidance
+                            input.style.width = '100%';
+                            input.style.fontStyle = 'italic'; // Make the placeholder italic
+
+                            // Replace the cell content with the input field
+                            target.innerText = '';
+                            target.appendChild(input);
+
+                            // Focus the input and handle update on blur or enter
+                            input.focus();
+                            input.addEventListener('blur', function () {
+                                if (input.value.trim() === '') {
+                                    target.innerText = 'Add details'; // Restore placeholder
+                                    target.style.fontStyle = 'italic';
+                                } else {
+                                    target.innerText = input.value;
+                                    target.style.fontStyle = 'normal';
+                                }
+                            });
+
+                            input.addEventListener('keydown', function (e) {
+                                if (e.key === 'Enter') {
+                                    if (input.value.trim() === '') {
+                                        target.innerText = 'Add details'; // Restore placeholder
+                                        target.style.fontStyle = 'italic';
+                                    } else {
+                                        target.innerText = input.value;
+                                        target.style.fontStyle = 'normal';
+                                    }
+                                    input.blur();
+                                }
+                            });
+                        }
+                    }
+                });
+            });
+
+            function loadReportedIssues() {
+                const plyCutter = document.getElementById('plyCutter').innerText.trim();
+                const currentShift = document.getElementById('shift-number').innerText.trim();
+                const currentDay = getCurrentDate();
+
+                fetch(`/api/get-issues?plyCutter=${plyCutter}&day=${currentDay}&shift=${currentShift}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log('Reported Issues API Response:', data);
+
+                        if (!data || !Array.isArray(data.issues)) {
+                            console.error('Invalid response format for reported issues:', data);
+                            return;
+                        }
+
+                        const issuesTableBody = document.getElementById('issues-table-body');
+                        const totalDowntimeValue = document.getElementById('total-downtime-value');
+                        issuesTableBody.innerHTML = "";
+                        let totalDowntime = 0;
+
+                        data.issues.forEach(issue => {
+                            const newRow = document.createElement('tr');
+                            newRow.innerHTML = `<td>${issue.issue_type}</td><td>${issue.downtime}</td>`;
+                            issuesTableBody.appendChild(newRow);
+                            totalDowntime += parseInt(issue.downtime);
+                        });
+
+                        totalDowntimeValue.innerText = totalDowntime;
+
+                        // ✅ Update counter with the real number of issues
+                      updateIssueCounter(data.issues.length);
+
+                    })
+                    .catch(err => console.error('Error fetching reported issues:', err));
+            }
+
+            // live updates from production_plycutter_setup, without UI reload
+            function fetchAndUpdateProductionScreen() {
+                const shift = document.getElementById("shift-number").innerText.trim();
+                const plyCutter = document.getElementById("plyCutter").innerText.trim();
+                const day = new Date().toISOString().split('T')[0];
+
+                fetch(`/api/get-submitted-data?day=${day}&shift=${shift}`)
+                    .then(response => response.json())
+                    .then(updatedData => {
+                        console.log("✅ Updated data received:", updatedData);
+
+                        updatedData.forEach(d => {
+                            if (d.plyCutter === plyCutter) {
+                                document.getElementById("program-display").innerText = d.program || "N/A";
+                                document.getElementById("obj-counter").innerText = d.obj_value || 0;
+
+                                // ✅ Ensure Production Counter Exists
+                                let prodCounterElem = document.getElementById("prod-counter");
+                                let prodValue = prodCounterElem ? parseInt(prodCounterElem.innerText) || 0 : 0;
+
+                                // ✅ Ensure Objective Exists
+                                let objValue = parseInt(d.obj_value) || 0;
+
+                                // ✅ Calculate Progress
+                                let progress = objValue > 0 ? (prodValue / objValue) * 100 : 0;
+                                progress = Math.min(100, Math.max(0, progress));
+
+                                // ✅ Update Progress Bar
+                                const progressBar = document.getElementById("progress-bar");
+                                if (progressBar) {
+                                    progressBar.style.width = `${progress}%`;
+                                    progressBar.innerText = `${Math.round(progress)}%`;
+
+                                    // Change color if production exceeds 100%
+                                    progressBar.style.backgroundColor = progress >= 100 ? 'red' : 'green';
+                                } else {
+                                    console.error("❌ Progress bar element not found!");
+                                }
+
+                                console.log(`📊 Progress bar updated: ${progress}%`);
+                            }
+                        });
+                    })
+                    .catch(error => console.error("❌ Error fetching production screen data:", error));
+            }
+
+            function toggleFullScreen() {
+                if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen().catch(err => {
+                        console.error(`❌ Fullscreen error: ${err.message}`);
+                    });
+                } else {
+                    document.exitFullscreen();
+                }
+            }
+            function toggleFullScreen() {
+                const container = document.querySelector('.zoom-container');
+
+                if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen().then(() => {
+                        container.style.transform = "scale(1.05)";
+                        container.style.transformOrigin = "center left";
+                    }).catch(err => {
+                        console.error(`❌ Fullscreen error: ${err.message}`);
+                    });
+                } else {
+                    document.exitFullscreen();
+                    container.style.transform = "scale(1)";
+                    container.style.transformOrigin = "top left";
+                }
+            }
+
+        </script>
+        <!-- Full Screen button for the tablets-->
+        <button id="fullscreen-btn" onclick="toggleFullScreen()" aria-label="Toggle Full Screen">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="black" viewBox="0 0 16 16">
+                <path d="M1 1h5v2H3v3H1V1zm9 0h5v5h-2V3h-3V1zm5 9v5h-5v-2h3v-3h2zM1 10h2v3h3v2H1v-5z"/>
+            </svg>
+        </button>
+
+</body>
+</html>

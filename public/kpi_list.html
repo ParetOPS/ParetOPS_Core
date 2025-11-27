@@ -1,0 +1,86 @@
+<!--
+  kpi_list.html - CONFIDENTIAL - PROPERTY OF PARETOPS
+
+  Contact: support@paretops.com for technical support or integration questions.
+
+  DESCRIPTION:
+  This static HTML page displays the full list of available production KPIs within the ParetOPS platform.
+  It dynamically loads and renders KPI names using the shared `kpi_production.js` script.
+
+  PURPOSE:
+  - Serve as a visual summary of all KPIs currently configured in the production dashboard.
+  - Validate correct integration and availability of KPI definitions in the JavaScript backend.
+  - Support audits, documentation, or training sessions by listing metrics tracked in real time.
+
+  FEATURES:
+  - Minimalist responsive layout using vanilla HTML and CSS.
+  - Automatically populates the KPI list on page load.
+  - Fallback message if KPI array is not correctly injected.
+
+  DEPLOYMENT:
+  - Served from `/public/kpi_list.html` and accessible through direct links or admin menus.
+  - Requires `/js/kpi_production.js` to be correctly loaded and define a global `kpis` array.
+
+  DEPENDENCIES:
+  - Relies on the variable `kpis` defined in `kpi_production.js` (must be loaded before DOM access).
+  - No external libraries required; fully self-contained in terms of layout and scripting.
+
+  AUTHOR:
+  Paulin Colin BANCKAERT — Version 3.0.0
+
+  VERSIONING:
+  - This file is tracked under Git. Any updates to KPI structure should be reflected here.
+-->
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Available Production KPIs</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    h2 {
+      color: #333;
+    }
+    ul {
+      list-style-type: square;
+      padding-left: 20px;
+    }
+    li {
+      margin-bottom: 6px;
+      font-size: 1.1rem;
+    }
+  </style>
+</head>
+<body>
+  <h2>📊 List of Available Production KPIs</h2>
+  <ul id="kpiList">Loading...</ul>
+
+  <!-- ✅ chemin mis à jour ici -->
+  <script src="js/kpi_production.js"></script>
+
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      const listElement = document.getElementById('kpiList');
+      listElement.innerHTML = '';
+
+      if (typeof kpis !== "undefined" && Array.isArray(kpis)) {
+        kpis.forEach(kpi => {
+          const li = document.createElement('li');
+          li.textContent = kpi.name;
+          listElement.appendChild(li);
+        });
+      } else {
+        const li = document.createElement('li');
+        li.textContent = '⚠️ Unable to load KPI list.';
+        listElement.appendChild(li);
+      }
+    });
+  </script>
+</body>
+</html>

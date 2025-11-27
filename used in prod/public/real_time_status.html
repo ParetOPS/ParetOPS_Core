@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Machine Production Status</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    
+    
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            height: 100vh;
+        }
+
+        /*     Home Button Styling */
+        .home-button {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background-color: #343a40;
+            color: white;
+            padding: 10px 12px;
+            border-radius: 6px;
+            font-size: 1.1rem;
+            text-decoration: none;
+            transition: background-color 0.2s ease-in-out;
+            box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .home-button:hover {
+            background-color: #1d2124;
+        }
+
+        .header {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center; /* Center elements horizontally */
+            padding: 10px 20px;
+        }
+
+        .page-title {
+            text-align: center;
+            flex-grow: 1; /* Allows centering while keeping home button aligned */
+        }
+
+        .machine-name {
+            position: absolute;
+            top: 5px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 2em;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .progress-container, .progress-text, .extra-info {
+            min-height: 50px; /* Prevent shifting */
+        }
+        .machine-container {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 20px;
+                justify-content: center;
+                align-items: center;
+            }
+        .machine-card {
+        
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 420px;
+            height: 180px;
+            background-color: #dc3545;
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 3px 3px 10px rgba(0, 0, 0, 0.2);
+            position: relative;
+            border: 2px solid black;  /* Default border */
+            transition: border 0.2s ease-in-out; /* Smooth transition */
+        }
+
+        /* Enable blinking border effect */
+        .blinking-border {
+            border-width: 35px;
+        }
+
+        /* Actual blinking effect - border only */
+        @keyframes blink-border {
+            0% { border-color: white; } 
+            50% { border-color: red; }
+            100% { border-color: white; }
+        }
+
+        .blinking-border-active {
+            border-width: 10px !important;  /* Increase thickness */
+            border-style: solid;
+            border-radius: 10px; /* Keeps corners smooth */
+            animation: blink-border 0.7s infinite alternate;
+        }
+
+
+        .machine-card.green { background-color: #28a745; color: white; }
+        .machine-card.yellow { background-color: #ffc107; color: black; }
+        .machine-card.red { background-color: #dc3545; color: white; }
+
+        .progress-container {
+            width: 100px;
+            height: 100px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+        .progress-circle {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            position: absolute;
+            background: conic-gradient(green 0deg, green 0deg, rgba(255, 255, 255, 0.2) 0deg 360deg);
+            mask: radial-gradient(circle, transparent 55%, black 56%);
+            -webkit-mask: radial-gradient(circle, transparent 55%, black 56%);
+            transition: background 0.5s ease-in-out;
+        }
+
+        .progress-text {
+            font-size: 1.5em;
+            font-weight: bold;
+            position: absolute;
+            color: white;
+            top: 55%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+
+        .machine-info {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            text-align: right;
+            font-size: 1.2em;
+            flex: 1;
+        }
+        .extra-info {
+            font-size: 1em;
+            font-weight: bold;
+            min-height: 30px; /* Prevent shifting */
+        }
+
+        .issue-reported {
+            position: absolute;
+            bottom: 10px;
+            right: 15px;
+            font-size: 1em;
+            font-weight: bold;
+        }
+
+        .shift-progress-container {
+            width: 95vw;  /* Almost full screen */
+            max-width: 1800px;  /* Prevent it from being too large */
+            height: 100px;  /* Increased height for better visibility */
+            background-color: #ddd;
+            border-radius: 15px;
+            box-shadow: 0px 4px 15px rgba(0, 0, 0, 0.3);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 20px auto; /* Centers the container */
+        }
+
+
+        .progress {
+            width: 100%;
+            height: 100px;
+            background-color: #ddd;
+            border-radius: 15px;
+            box-shadow: 0px 4px 15px rgba(0, 0, 0, 0.3);
+            position: relative;
+            overflow: hidden; /* Ensures nothing overflows */
+        }
+
+        #shift-progress-bar {
+            height: 100%;
+            width: 0%;
+            background-color: yellow;
+            text-align: center;
+            font-size: 32px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center; /* Centre le texte */
+            padding-left: 0px; /* Supprime le décalage */
+            border-radius: 15px;
+            transition: width 0.7s ease-in-out;
+            position: absolute;
+            left: 0;
+            color: white; /* Rend le texte blanc */
+            font-weight: bold; /* Rend le texte en gras */
+        }
+
+        #shift-progress-bar.fixed-text {
+            justify-content: flex-end; /* Fixe le texte à droite si > 100% */
+            padding-right: 10px;
+        }
+
+        /* Ensure Training and Down cards stay white */
+        .machine-card.training,
+        .machine-card.down {
+            background-color: white !important;
+            color: black !important;
+            align-items: center;
+            justify-content: center;
+            text-align: center; /* Ensure text is centered */
+        }
+
+        .bg-success {
+            background-color: #28a745 !important; /* Bootstrap Green */
+            transition: background-color 0.5s ease-in-out;
+        }
+
+        .bg-warning {
+            background-color: #ffc107 !important; /* Bootstrap Yellow */
+            transition: background-color 0.5s ease-in-out;
+        }
+
+        .bg-danger {
+            background-color: #dc3545 !important; /* Bootstrap Red */
+            transition: background-color 0.5s ease-in-out;
+        }
+
+        .reload-button {
+            position: fixed;
+            top: 20px;
+            left: 120px; /* Adjusted position for spacing */
+            background-color: #343a40;
+            color: white;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 1.1rem;
+            text-decoration: none;
+            transition: background-color 0.2s ease-in-out;
+            box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .reload-button:hover {
+            background-color: #1d2124;
+        }
+
+        /* Ensures the icon is centered inside the button */
+        .reload-button i {
+            font-size: 1.2rem;
+        }
+
+        .logo {
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            width: 100px; /* Adjust as needed */
+            height: auto;
+        }
+
+
+    </style>
+</head>
+<body>
+    <div class="header" style="display: flex; align-items: center; justify-content: center; width: 100%; position: relative;">
+        <!-- Home Button -->
+        <a href="/" class="home-button"><i class="fas fa-home"></i> Home</a>
+        <a href="#" class="reload-button" onclick="fetchAndUpdateMachineData()">
+            <i class="fas fa-sync-alt"></i>
+        </a>
+    
+        <!-- Centered Title -->
+        <h2 class="page-title" style="margin: 0 auto;">Real-Time Machine Production Status</h2>
+    
+        <!-- Logo in Top Right -->
+        <img src="/images/paretops.svg" alt="Pareto OPS" style="height: 60px; position: absolute; right: 80px;">
+    </div>
+    
+    <div class="machine-container" id="machine-container"></div>
+    
+    <h2 id="shift-name">Shift: Loading... </h2>
+    <!--
+    Shift Progress Bar
+    <div class="shift-progress-container">
+        <div class="progress">
+            <div id="shift-progress-bar">0%</div>
+        </div>    
+    </div>
+    <h3 id="shift-progress-text">Total PROD: 0 / Total OBJ: 0</h3>
+     -->
+</body>
+
+    <script>
+        const socket = io();  // ✅ This initializes the WebSocket connection
+        const allMachines = ["PC1", "PC2", "PC4", "PC5", "PC6", "PC7", "PC8", "PC9", "PC10"];
+        let blinkingIntervals = {};  // ✅ Global object to store blinking intervals
+
+        socket.on("machineDataUpdated", (data) => {
+            console.log("🔄 Received machine data update:", data);
+
+            const { plyCutter, helpRequested = 0, program, status, obj_value, prod_value } = data;
+
+            // Locate the existing machine card
+            let machineCard = document.querySelector(`.machine-card[data-machine="${plyCutter}"]`);
+
+            if (!machineCard) {
+                console.warn(`⚠️ No existing machine card found for ${plyCutter}`);
+                return;
+            }
+
+            // Handle "DOWN" state: Preserve previous data but show "DOWN"
+            if (status && status.toUpperCase() === "DOWN") {
+                console.log(`🔴 Machine ${plyCutter} is DOWN, updating UI`);
+
+                if (!machineCard.dataset.previousContent) {
+                    machineCard.dataset.previousContent = machineCard.innerHTML; // Save previous UI state
+                }
+
+                machineCard.classList.add("down");
+                machineCard.innerHTML = `
+                    <div class="machine-name" style="font-size: 10em; font-weight: bold; text-align: center;">${plyCutter}</div>
+                    <div style="color: red; font-size: 2em; font-weight: bold;">DOWN</div>
+                `;
+                return;
+            }
+
+            // Handle "UP" state: Restore previous UI
+            if (status && status.toUpperCase() === "UP") {
+                console.log(`🟢 Machine ${plyCutter} is UP, restoring previous UI`);
+
+                if (machineCard.dataset.previousContent) {
+                    machineCard.innerHTML = machineCard.dataset.previousContent;
+                    machineCard.classList.remove("down");
+                } else {
+                    console.warn(`⚠️ No previous data saved for ${plyCutter}`);
+                }
+            }
+
+            // Ensure elements exist before updating
+            const programElement = machineCard.querySelector('.program-name');
+            if (programElement) {
+                programElement.innerHTML = `Program: ${program || "N/A"}`;
+            }
+
+            const objElement = machineCard.querySelector('.machine-info div:nth-child(3)');
+            const prodElement = machineCard.querySelector('.machine-info div:nth-child(4)');
+            if (objElement && prodElement) {
+                if (typeof obj_value !== 'undefined' && obj_value !== null) {
+                    objElement.innerHTML = `OBJ: ${obj_value}`;
+                }
+                if (typeof prod_value !== 'undefined' && prod_value !== null) {
+                    prodElement.innerHTML = `PROD: ${prod_value}`;
+                }
+            }
+
+
+            // ✅ Handle "Call for Help" Button Flashing 
+            const callButton = machineCard.querySelector(".button-call");
+            if (callButton) {
+                if (helpRequested) {
+                    console.log(`🔴 Help requested! Blinking enabled for ${plyCutter}`);
+                    callButton.classList.add("flash-call");
+                } else {
+                    console.log(`✅ Help resolved. Blinking disabled for ${plyCutter}`);
+                    callButton.classList.remove("flash-call");
+                }
+            }
+
+            //  Blinking Border on Matching Card
+            if (helpRequested) {
+                console.log(`🔴 Help requested! Adding blinking border to ${plyCutter}`);
+                machineCard.classList.add("blinking-border-active");
+            } else {
+                console.log(`✅ Help resolved. Removing blinking border from ${plyCutter}`);
+                machineCard.classList.remove("blinking-border-active");
+            }
+
+            if (prodElement) {
+                prodElement.innerHTML = `PROD: ${prod_value !== undefined && prod_value !== -1 ? prod_value : prodElement.innerHTML.split(': ')[1]}`;
+            }
+
+            // ✅ Update progress circle safely
+            const progressCircle = machineCard.querySelector('.progress-circle');
+            const progressText = machineCard.querySelector('.progress-text');
+            const prevOBJ = parseInt(objElement.innerText.split(": ")[1]) || 0;
+            const prevPROD = parseInt(prodElement.innerText.split(": ")[1]) || 0;
+
+            // Keep previous values if undefined
+            const updatedOBJ = (typeof obj_value !== 'undefined' && obj_value !== null) ? obj_value : prevOBJ;
+            const updatedPROD = (typeof prod_value !== 'undefined' && prod_value !== null) ? prod_value : prevPROD;
+
+            let progressPercentage = updatedOBJ > 0 ? Math.round((updatedPROD / updatedOBJ) * 100) : 0;
+            if (progressCircle && progressText) {
+                progressCircle.style.background = `conic-gradient(white ${progressPercentage * 3.6}deg, rgba(255, 255, 255, 0.2) ${progressPercentage * 3.6}deg 360deg)`;
+                progressText.innerText = `${progressPercentage}%`;
+                console.log(`🔄 Updated progress for ${plyCutter}: ${progressPercentage}%`);
+            }
+
+            // ✅ Update background color based on progress
+            machineCard.classList.remove("bg-success", "bg-warning", "bg-danger");
+            if (progressPercentage >= 100) {
+                machineCard.classList.add("bg-success");  // 🟢 Green
+            } else if (progressPercentage >= 70) {
+                machineCard.classList.add("bg-warning");  // 🟡 Yellow
+            } else {
+                machineCard.classList.add("bg-danger");   // 🔴 Red
+            }
+        });
+
+        socket.on("updateMachineStatus", () => {
+            console.log("🔄 Detected status change — refreshing data");
+            fetchAndUpdateMachineData();  // This is the function that reloads everything
+        });
+
+        socket.on("shiftChanged", (data) => {
+            fetchAndUpdateMachineData();  // Re-fetch and re-merge all relevant data
+        });
+
+
+                //used to load updates from production_plycutter_setup from Area Coordinator
+        socket.on('refreshRealTimeStatus', () => {
+            console.log("🔄 Refresh event received. Reloading real-time status...");
+            fetchAndUpdateMachineData(); // ✅ Refresh the displayed data
+        });
+
+        function getCurrentDate() {
+            const today = new Date();
+            return today.toISOString().split('T')[0]; // Returns YYYY-MM-DD format
+        }
+
+        function fetchUpdatedProductionData() {
+            fetch("/api/get-submitted-data?day=" + getCurrentDate() + "&shift=" + document.getElementById("shift-name").innerText.split(": ")[1])
+                .then(response => response.json())
+                .then(data => {
+                    updateMachineCards(data); // Refresh the production status
+                })
+                .catch(error => console.error("Error fetching updated production data:", error));
+        }
+
+        function updateMachineCards(data) {
+            const container = document.getElementById("machine-container");
+            container.innerHTML = "";
+
+            console.log("Received Data:", data); // Debugging: Ensure backend data is received
+
+            let machineData = {};
+            data.forEach(machine => {
+            console.log(`Checking machine data:`, machine);
+            if (machine.plyCutter && machine.obj_value !== undefined && machine.prod_value !== undefined) {
+                machineData[machine.plyCutter] = {
+                    obj_value: parseInt(machine.obj_value), 
+                    prod_value: parseInt(machine.prod_value),
+                    program: machine.program || "N/A",
+                    trainee: machine.trainee === 1,
+                    floater: machine.floater === 1,
+                    status: machine.status || "UP",
+                    shift: machine.shift || "N/A"
+                };
+
+            } else {
+                console.warn(`⚠️ Skipping machine due to missing values:`, machine);
+            }
+            });
+
+            allMachines.forEach(machineName => {
+                const machine = machineData[machineName] || { obj_value: 0, prod_value: 0, program: "N/A", trainee: false, floater: false, isDown: false, status: "UP" };
+
+
+                // ✅ Use "status" instead of "isDown"
+                if (machine.status === "DOWN") {
+                    console.log(`🔴 Machine ${machineName} is marked DOWN`);
+                    const downCard = document.createElement("div"); // ✅ Create a new div properly
+                    downCard.className = `machine-card down`;
+                    downCard.setAttribute("data-machine", machineName);
+
+                    downCard.innerHTML = `
+                        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
+                            <div class="machine-name">${machineName}</div>
+                            <div style="color: red; font-size: 3em; font-weight: bold; text-align: center;">DOWN</div>
+                        </div>
+                    `;
+
+
+                    container.appendChild(downCard);
+                    return; // ✅ Skip further processing for this machine
+                }
+
+
+                // If the machine is assigned to a trainee, make sure it stays white
+                if (machine.trainee) {
+                    const traineeCard = document.createElement("div");
+                    traineeCard.className = `machine-card training`; // Add a class instead of inline styling
+                    traineeCard.setAttribute("data-machine", machineName);
+
+                    traineeCard.innerHTML = `
+                        <div class="machine-name plyCutter-title" style="font-size: 2.3em; font-weight: bold; text-align: center; width: 100%;">${machineName}</div>
+                        <div class="machine-info">
+                            <div class="program-name">Program: ${machine.program}</div>
+                            <div style="font-size: 2em; font-weight: bold; text-align: center; width: 100%;">TRAINING</div>
+                        </div>
+                    `;
+
+                    container.appendChild(traineeCard);
+                    return; // Skip further processing for this machine
+                }
+
+
+                // Normal Machine Display Logic
+                let obj_value = machine.obj_value !== undefined ? parseInt(machine.obj_value) : 0;
+                let prod_value = machine.prod_value !== undefined ? parseInt(machine.prod_value) : 0;
+                console.log(`✅ Extracted values for ${machineName}: OBJ=${obj_value}, PROD=${prod_value}`);
+
+                let progressPercentage = (obj_value > 0) ? Math.round((prod_value / obj_value) * 100) : 0;
+
+                let progressColor = "white";
+                if (progressPercentage >= 100) progressColor = "green";
+                else if (progressPercentage >= 70) progressColor = "yellow";
+                else if (progressPercentage > 0) progressColor = "red";
+                console.log(`Debugging ${machineName}: obj_value=${obj_value} (${typeof obj_value}), prod_value=${prod_value} (${typeof prod_value})`);
+
+
+                let extraInfo = [];
+                if (machine.floater) extraInfo.push("Floater");
+                console.log(`Rendering Machine: ${machineName}, Data:`, machine);
+
+                const machineCard = document.createElement("div");
+                machineCard.className = `machine-card ${progressColor}`;
+                machineCard.setAttribute("data-machine", machineName);
+                machineCard.setAttribute("data-shift", machine.shift);  // ✅ Store shift for filtering
+
+
+                // Create the progress display container
+                const progressContainer = document.createElement("div");
+                progressContainer.className = "progress-container";
+
+                // Create the circular progress bar
+                const progressCircle = document.createElement("div");
+                progressCircle.className = "progress-circle";
+                progressCircle.style.background = `conic-gradient(white ${progressPercentage * 3.6}deg, rgba(255, 255, 255, 0.2) ${progressPercentage * 3.6}deg 360deg)`;
+                console.log(`Updating progress circle for ${machineName}: ${progressPercentage}%`);
+
+                // Create the progress percentage text
+                const progressText = document.createElement("div");
+                progressText.className = "progress-text";
+                progressText.innerText = `${progressPercentage}%`;
+
+                // Append progress elements to the container
+                progressContainer.appendChild(progressCircle);
+                progressContainer.appendChild(progressText);
+
+                // Append elements to the machine card
+                machineCard.appendChild(progressContainer);
+                machineCard.innerHTML += `
+                    <div class="machine-info">
+                        <div class="machine-name plyCutter-title">${machineName}</div>
+                        <div>Program: ${machine.program}</div>
+                        <div>OBJ: ${machine.obj_value}</div>
+                        <div>PROD: ${machine.prod_value}</div>
+                    </div>
+                `;
+
+                container.appendChild(machineCard);
+            });
+        }
+
+        // loads data when the page refreshes
+        function fetchAndUpdateMachineData(providedShift = null) {
+            const currentDay = getCurrentDate();
+
+            const fetchShift = providedShift 
+                ? Promise.resolve({ shift: providedShift })
+                : fetch('/api/get-current-shift').then(res => res.json());
+
+            fetchShift
+                .then(shiftData => {
+                    if (!shiftData.shift) {
+                        console.error("❌ Shift data is missing!");
+                        return;
+                    }
+
+                    const shift = shiftData.shift;
+                    const shiftElement = document.getElementById("shift-name");
+                    if (shiftElement) {
+                        shiftElement.innerText = "Shift: " + shift;
+                    }
+
+                    // ✅ Fetch both machine status and production data at the same time
+                    return Promise.all([
+                        fetch(`/api/get-all-status`).then(res => res.json()),
+                        fetch(`/api/get-submitted-data?shift=${shift}&day=${currentDay}`).then(res => res.json())
+                    ]);
+                })
+                .then(([statusData, prodData]) => {
+                    if (!statusData || !prodData) {
+                        console.error("❌ Missing machine status or production data!");
+                        return;
+                    }
+
+                    console.log("✅ Data fetched after refresh:", { statusData, prodData });
+
+                    let mergedData = allMachines.map(machineName => {
+                        let machineProdData = prodData.find(m => m.plyCutter === machineName) || {};
+                        let machineStatus = statusData.find(s => s.plyCutter === machineName) || {};
+
+                        return { 
+                            plyCutter: machineName,
+                            obj_value: machineProdData.obj_value || 0,
+                            prod_value: machineProdData.prod_value || 0,
+                            program: machineProdData.program || "N/A",
+                            floater: machineProdData.floater || false,
+                            trainee: machineProdData.trainee || false,
+                            help_requested: machineStatus.help_requested || 0,
+                            status: machineStatus.status || "UP"
+                        };
+                    });
+
+                    updateMachineCards(mergedData);
+
+                    mergedData.forEach(machine => {
+                        if (machine.help_requested) {
+                            console.log(`🔴 Restoring blinking for ${machine.plyCutter}`);
+                            let machineCard = document.querySelector(`.machine-card[data-machine="${machine.plyCutter}"]`);
+                            if (machineCard) {
+                                machineCard.classList.add("blinking-border-active");
+                            }
+                        }
+                    });
+                })
+                .catch(error => console.error('❌ Error fetching data:', error));
+        }
+
+
+
+            /*
+            // ✅ Update shift progress bar
+            const shiftProgressBar = document.getElementById("shift-progress-bar");
+            const shiftProgressText = document.getElementById("shift-progress-text");
+
+            let totalProd = 0;
+            let totalObj = 0;
+
+            // Get the current shift name
+            const currentShift = document.getElementById("shift-name").innerText.split(": ")[1] || "Unknown";
+
+            document.querySelectorAll(".machine-card").forEach((card) => {
+                const cardShift = card.getAttribute("data-shift");
+                if (cardShift === currentShift) {
+                    const obj = parseInt(card.querySelector('.machine-info div:nth-child(3)')?.innerText.replace("OBJ: ", "")) || 0;
+                    const prod = parseInt(card.querySelector('.machine-info div:nth-child(4)')?.innerText.replace("PROD: ", "")) || 0;
+                    totalObj += obj;
+                    totalProd += prod;
+                }
+            });
+
+            let shiftProgressPercentage = Math.round((totalProd / Math.max(totalObj, 1)) * 100);
+
+            shiftProgressBar.style.width = `${Math.min(shiftProgressPercentage, 100)}%`;
+            shiftProgressBar.innerText = `${shiftProgressPercentage}%`;
+            shiftProgressBar.style.backgroundColor = shiftProgressPercentage >= 100 ? "green" : shiftProgressPercentage >= 70 ? "yellow" : "red";
+            shiftProgressText.innerText = `Total PROD: ${totalProd} / Total OBJ: ${totalObj}`;
+            */
+        
+
+
+        /*
+        function updateShiftProgress(data) {
+            let totalProd = 0;
+            let totalObj = 0;
+
+            data.forEach(machine => {
+                totalProd += machine.prod_value || 0;
+                totalObj += machine.obj_value || 0;
+            });
+
+            let progressPercentage = (totalObj > 0) ? Math.round((totalProd / totalObj) * 100) : 0;
+            const progressBar = document.getElementById("shift-progress-bar");
+            progressBar.style.width = (progressPercentage > 100 ? 100 : progressPercentage) + "%";
+            progressBar.innerText = progressPercentage + "%";
+            progressBar.style.backgroundColor = progressPercentage >= 100 ? "green" : progressPercentage >= 70 ? "yellow" : "red";
+            progressBar.style.color = "white"; // Garde le texte blanc même si la couleur de fond change
+
+            // Fixe le texte si le pourcentage dépasse 100%
+            if (progressPercentage > 100) {
+                progressBar.classList.add("fixed-text");
+            } else {
+                progressBar.classList.remove("fixed-text");
+            }
+
+
+            
+            document.getElementById("shift-progress-text").innerText = `Total PROD: ${totalProd} / Total OBJ: ${totalObj}`;
+            
+            // Update markers
+            document.querySelectorAll(".marker-bowl, .marker-line").forEach(marker => {
+                let markerPercent = parseInt(marker.getAttribute("data-percent"));
+                if (progressPercentage >= markerPercent) {
+                    marker.style.background = "green";
+                } else {
+                    marker.style.background = "gray";
+                }
+            });
+        }
+        */
+
+        /*
+        // Fetch data on load 
+    // Function to refresh data every 5s
+        function autoRefreshData() {
+            fetchAndUpdateMachineData();
+        }
+
+        // Run every 5 seconds (5000ms)
+        setInterval(autoRefreshData, 5000);
+        */
+
+        // Data Loading procedure
+        document.addEventListener("DOMContentLoaded", () => {
+            console.log("🔄 Page loaded, fetching initial data...");
+
+            // Step 1: Fetch the current shift first
+            fetch("/api/get-current-shift")
+                .then(response => response.json())
+                .then(shiftData => {
+                    if (!shiftData.shift) {
+                        console.error("❌ Shift data is missing!");
+                        return;
+                    }
+
+                    const shiftElement = document.getElementById("shift-name");
+                    if (shiftElement) {
+                        shiftElement.innerText = "Shift: " + shiftData.shift;
+                    }
+
+                    const currentDay = getCurrentDate();
+
+                    // Step 2: Fetch both machine status and production data at the same time
+                    return Promise.all([
+                        fetch(`/api/get-all-status`).then(res => res.json()),
+                        fetch(`/api/get-submitted-data?shift=${shiftData.shift}&day=${currentDay}`).then(res => res.json())
+                    ]);
+                })
+                .then(([statusData, prodData]) => {
+                    if (!statusData || !prodData) {
+                        console.error("❌ Missing machine status or production data!");
+                        return;
+                    }
+
+                    console.log("✅ Data fetched after reload:", { statusData, prodData });
+
+                    // Step 3: Merge machine status and production data
+                    let mergedData = allMachines.map(machineName => {
+                        let machineProdData = prodData.find(m => m.plyCutter === machineName) || {};
+                        let machineStatus = statusData.find(s => s.plyCutter === machineName) || {};
+
+                        return { 
+                            plyCutter: machineName,
+                            obj_value: machineProdData.obj_value || 0,
+                            prod_value: machineProdData.prod_value || 0,
+                            program: machineProdData.program || "N/A",
+                            floater: machineProdData.floater || false,
+                            trainee: machineProdData.trainee || false,
+                            status: machineStatus.status || "UP"  // ✅ Properly handles DOWN status
+                        };
+                    });
+
+                    // Step 4: Update the UI
+                    updateMachineCards(mergedData);
+                })
+                .catch(error => console.error('❌ Error fetching data:', error));
+        });
+
+
+
+
+
+
+    </script>
+    
+</body>
+</html>

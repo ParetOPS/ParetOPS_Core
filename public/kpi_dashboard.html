@@ -1,0 +1,607 @@
+<!--
+  kpi_dashboard.html - CONFIDENTIAL - PROPERTY OF PARETOPS
+
+  For support or integration questions, contact: support@paretops.com
+
+  DESCRIPTION:
+  This HTML file serves as the master container for all KPI dashboards in the ParetOPS application.
+  It provides dynamic access to three data visualization modules:
+  - Production KPIs
+  - Maintenance KPIs
+  - Continuous Improvement (CI) Projects
+
+  PURPOSE:
+  - Display and manage performance indicators across manufacturing operations.
+  - Allow seamless switching between Production, Maintenance, and CI views.
+  - Centralize dashboard logic and UI within a unified, responsive interface.
+
+  FEATURES:
+  - Full-screen animated loading overlay with real-time progress messages and fun facts.
+  - Toggle slider to switch between KPI categories (Production, Maintenance, CI).
+  - Dynamic HTML and script loading using Fetch API for modular architecture.
+  - Chart.js and plugins for all KPI visualizations, with extended support for Luxon in CI.
+  - Auto-cleaning of conflicting scripts and charts between module switches.
+
+  DEPLOYMENT:
+  - This page is served from /public/kpi_dashboard.html and linked to from the Leader menu.
+  - Expects HTML partials at:
+    - /production_kpi.html
+    - /maintenance_kpi.html
+    - /continuous_improvement_kpi.html
+  - Depends on external JS scripts:
+    - /js/kpi_production.js
+    - /js/kpi_maintenance.js
+    - /js/kpi_continuous.js
+    - /js/utils.js
+
+  DEPENDENCIES:
+  - Bootstrap 5.3 (layout and modals)
+  - Chart.js (data visualization)
+  - chartjs-plugin-annotation (advanced visual cues)
+  - Luxon and chartjs-adapter-luxon (date support for CI charts)
+
+  AUTHOR:
+  Paulin Colin BANCKAERT — Version 3.0.0
+
+  VERSIONING:
+  - Managed under Git. Tag any changes that impact frontend structure or KPI logic.
+-->
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  
+  
+  <title>KPI Dashboard</title>
+
+  <!-- Load Bootstrap CSS for styling -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" />
+  <link rel="icon" type="image/png" href="/favicon.png">
+
+
+  <style>
+    /* General body styling */
+    body {
+      background: #f8f9fa;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      display: flex;                  
+      flex-direction: column;        
+      align-items: stretch;       
+    }
+
+    .fixed-top-left {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        z-index: 1000;
+        display: flex;
+        gap: 10px;
+    }
+
+
+    /* Loading screen overlay styling */
+    .loading-overlay {
+        position: fixed;
+        top: 0; left: 0;
+        width: 100vw; height: 100vh;
+        background-color: white;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+    }
+
+    /* Style for loading video */
+    .loading-video {
+        max-width: 300px;
+        border-radius: 12px;
+        margin-bottom: 20px;
+    }
+
+    /* Style for loading message text */
+    .loading-text {
+        font-size: 1.4rem;
+        color: black;
+        font-weight: bold;
+    }
+
+    /* Toggle switch container */
+    .kpi-toggle {
+        width: 800px;
+        display: inline-flex;
+        background-color: #fefefe;
+        border: 1px solid #ccc;
+        border-radius: 999px;
+        overflow: hidden;
+        margin: 0 auto 30px;
+        padding: px;
+        font-family: 'Inter', sans-serif;
+        font-size: 1rem;
+        font-weight: 600;
+        justify-content: center;
+        position: relative;
+    }
+
+
+    .kpi-toggle span {
+        flex: 1;
+        padding: 10px 20px;
+        border-radius: 999px;
+        cursor: pointer;
+        text-align: center;
+        color: #333;
+        z-index: 1;
+        transition: background-color 0.3s, color 0.3s;
+        position: relative;
+    }
+
+    .kpi-toggle span:hover {
+        background-color: rgba(13, 110, 253, 0.1); /* hover léger */
+    }
+    .kpi-slider {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 28.57%;
+        height: 100%;
+        border-radius: 999px;
+        background-color: #0d6efd;
+        transition: all 0.3s ease;
+        z-index: 0;
+    }
+
+    /* Adjusting flex ratio: Production = 1, Maintenance = 1, CI = 1.5 */
+    #prodLabel { flex: 1; }
+    #maintLabel { flex: 1; }
+    #ciLabel { flex: 1.5; }
+
+    /* KPI content fade effect */
+    #kpi-content {
+      transition: opacity 0.4s ease;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Full-screen loading overlay with video and animated text -->
+  <div class="loading-overlay" id="loading-screen" style="display:none;">
+    <video autoplay muted loop class="loading-video">
+      <source src="/videos/Loading-ParetOPS.mp4" type="video/mp4" />
+    </video>
+    <div class="loading-text" id="loading-text">Loading...</div>
+    <div id="fun-fact" style="margin-top: 16px; font-size: 1.3rem; color: #333; text-align: center; max-width: 460px; line-height: 1.5;">
+      <em style="font-weight: 500;"></em>
+    </div>
+    
+    
+  </div>
+
+  <!-- Navigation and reload buttons -->
+  <div class="fixed-top-left">
+    <a href="/leader.html" class="btn btn-sm btn-secondary">
+      <i class="fas fa-arrow-left"></i> Back
+    </a>
+    <button onclick="reloadWithVideo()" class="btn btn-sm btn-primary" title="Reload Data">
+      <i class="fas fa-sync-alt"></i>
+    </button>
+  </div>
+     
+
+  <!-- Main dashboard title -->
+  <h1 class="text-center mb-4" style="font-family: Arial, sans-serif; font-size: 2rem; font-weight: bold;">
+    Performance Dashboard
+  </h1>
+  
+  <!-- Toggle switch for Production and Maintenance views -->
+  <div class="kpi-toggle">
+    <div class="kpi-slider" id="slider"></div>
+    <span id="prodLabel" onclick="setKpi('production')">Production</span>
+    <span id="maintLabel" onclick="setKpi('maintenance')">Maintenance</span>
+    <span id="ciLabel" onclick="setKpi('continuous')">Continuous Improvement</span>
+  </div>
+  
+
+  <!-- Container where KPI content will be loaded -->
+  <div id="kpi-content">
+    <div id="placeholder" class="text-center mt-5">
+      <img src="/images/paretops.svg" alt="ParetOPS Logo" style="max-width: 500px; width: 90%;">
+      <div class="mt-4 text-muted">Please select a category above to load KPIs.</div>
+    </div>
+  </div>
+  
+
+  <script>
+    // Track the current view ("production" or "maintenance")
+    let current = null;
+    let productionHtml = null;
+
+    // Toggle between production and maintenance views
+    let ciHtml = null;
+
+    function setKpi(view) {
+        const slider = document.getElementById('slider');
+        const content = document.getElementById('kpi-content');
+        current = view;
+
+        // Déterminer l'élément actif
+        let activeLabel;
+        if (view === 'production') {
+            activeLabel = document.getElementById('prodLabel');
+            loadProduction(true);
+        } else if (view === 'maintenance') {
+            activeLabel = document.getElementById('maintLabel');
+            loadMaintenance();
+        } else if (view === 'continuous') {
+            activeLabel = document.getElementById('ciLabel');
+            loadContinuousImprovement();
+        }
+
+        // Déplacement dynamique du slider
+        const toggleContainer = document.querySelector('.kpi-toggle');
+        const rect = activeLabel.getBoundingClientRect();
+        const containerRect = toggleContainer.getBoundingClientRect();
+
+        slider.style.width = `${rect.width}px`;
+        slider.style.left = `${rect.left - containerRect.left}px`;
+
+        // Animation du contenu
+        content.style.opacity = 0;
+        setTimeout(() => { content.style.opacity = 1; }, 400);
+    }
+
+    // Load the Production KPI view with a loading animation and dynamic script loading
+    function loadProduction(showOverlay = true) {
+      cleanKpiEnvironment();
+
+      const overlay = document.getElementById('loading-screen');
+      const textElement = document.getElementById('loading-text');
+      const slider = document.getElementById('slider');
+      slider.style.left = '0%';
+      slider.style.width = '28.57%';
+
+      const messages = [
+        "Data Collection...",
+        "Filtering...",
+        "Analyzing Trends...",
+        "Building KPI Cards...",
+        "Almost There..."
+      ];
+
+      const video = document.querySelector('.loading-video');
+      video.addEventListener('loadedmetadata', () => {
+        video.currentTime = 0.3;
+        video.play();
+      });
+
+      const funFacts = [
+        "At Kit Cut, ParetOPS collects over 15,000 data points per month to deliver the most accurate insights.",
+        "Every downtime, help request, and delay is tracked in real time — no more blind spots.",
+        "ParetOPS analyzes data from every shift, every machine, every day — automatically.",
+        "ParetOPS benchmarks every ply cutter weekly to spot the weak links — before they cost you.",
+        "With ParetOPS, Continuous Improvement is not a slogan — it’s a live process.",
+        "Want a new feature or KPI? Just email us at contact@paretops.com — we build what you need.",
+        "Found a bug or issue? Report it to support@paretops.com — we fix it fast."
+      ];
+      const funFactElement = document.querySelector('#fun-fact em');
+      let funFactIndex = 0;
+
+      // Fun fact updater (every 10 seconds)
+      function updateFunFact() {
+        funFactElement.textContent = funFacts[funFactIndex];
+        funFactIndex = (funFactIndex + 1) % funFacts.length;
+      }
+
+      updateFunFact(); // Show first fun fact immediately
+      const funFactInterval = setInterval(updateFunFact, 10000);
+
+      // Display loading messages sequentially (3s each)
+      let msgIndex = 0;
+      function showNextMessage() {
+        if (msgIndex >= messages.length) return;
+        textElement.textContent = messages[msgIndex];
+        msgIndex++;
+        setTimeout(showNextMessage, 3000);
+      }
+
+      let overlayCanHide = false;
+      let contentIsReady = false;
+
+      // Allow hiding overlay after 4 seconds
+      setTimeout(() => {
+        overlayCanHide = true;
+        if (contentIsReady) overlay.style.display = 'none';
+      }, 4000);
+
+      // Set up loading completion behavior
+      window.productionLoadingComplete = () => {
+        contentIsReady = true;
+        clearInterval(funFactInterval);
+        if (overlayCanHide) {
+          document.getElementById('loading-screen').style.display = 'none';
+        }
+      };
+
+      // Fetch HTML, then load scripts and display overlay
+      fetch('/production_kpi.html')
+        .then(res => res.text())
+        .then(html => {
+          productionHtml = html;
+          document.getElementById('kpi-content').innerHTML = html;
+
+          if (showOverlay) {
+            overlay.style.display = 'flex';
+            showNextMessage();
+          }
+
+          const chartScript = document.createElement('script');
+          chartScript.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+          chartScript.onload = () => {
+            const pluginScript = document.createElement('script');
+            pluginScript.src = 'https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@1.4.0';
+            pluginScript.onload = () => {
+              const customScript = document.createElement('script');
+              customScript.src = '/js/kpi_production.js';
+              customScript.id = 'productionScript';
+              customScript.onload = () => {
+                setTimeout(() => {
+                  if (typeof startProductionKpiApp === 'function') startProductionKpiApp();
+                }, 50);
+              };
+              document.body.appendChild(customScript);
+            };
+            document.body.appendChild(pluginScript);
+          };
+          document.body.appendChild(chartScript);
+        })
+        .catch(() => {
+          textElement.textContent = "Error loading dashboard.";
+        });
+    }
+
+
+    // Load the Maintenance KPI dashboard with full dependency checks and animated overlay
+    function loadMaintenance(showOverlay = true) {
+      cleanKpiEnvironment(); // Clean any previous KPI content or scripts
+
+      const overlay = document.getElementById('loading-screen');
+      const textElement = document.getElementById('loading-text');
+
+      // Move the toggle slider to "Maintenance"
+      const slider = document.getElementById('slider');
+      slider.style.left = '28.57%';
+      slider.style.width = '28.57%';
+
+      // List of loading messages to display
+      const messages = [
+        "Collecting Maintenance Logs...",
+        "Calculating KPIs...",
+        "Analyzing Trends...",
+        "Rendering Charts...",
+        "Finalizing..."
+      ];
+
+      // Distribute messages randomly over 3 seconds
+      const totalTime = 3000;
+      const weights = messages.map(() => Math.random());
+      const totalWeight = weights.reduce((a, b) => a + b, 0);
+      const durations = weights.map(w => (w / totalWeight) * totalTime);
+      let index = 0;
+
+      // Reset and play loading video
+      const video = document.querySelector('.loading-video');
+      video.addEventListener('loadedmetadata', () => {
+        video.currentTime = 0.3;
+        video.play();
+      });
+
+      // Show overlay if enabled
+      if (showOverlay) overlay.style.display = 'flex';
+
+      // Define how to hide the overlay later
+      let overlayCanHide = false;
+      let contentIsReady = false;
+
+      // Allow hiding the overlay only after 4 seconds AND once KPIs are ready
+      setTimeout(() => {
+        overlayCanHide = true;
+        if (typeof window.productionLoadingComplete === 'function') {
+          window.productionLoadingComplete();  // Check readiness after 4s
+        }
+      }, 4000);
+
+      window.productionLoadingComplete = () => {
+        contentIsReady = true;
+        if (overlayCanHide) {
+          document.getElementById('loading-screen').style.display = 'none';
+        }
+      };
+
+
+
+      // Display animated loading messages
+      let msgIndex = 0;
+
+      function showNextMessage() {
+        textElement.textContent = messages[msgIndex];
+        msgIndex++;
+        if (msgIndex < messages.length) {
+          setTimeout(showNextMessage, 3000); // wait at least 3 seconds before showing next
+        }
+      }
+
+      // Show the first message immediately, then schedule the rest
+      showNextMessage();
+      const funFacts = [
+        "At Kit Cut, ParetOPS collects over 15,000 data points per month to deliver the most accurate insights.",
+        "Every downtime, help request, and delay is tracked in real time — no more blind spots.",
+        "ParetOPS analyzes data from every shift, every machine, every day — automatically.",
+        "ParetOPS benchmarks every ply cutter weekly to spot the weak links — before they cost you.",
+        "With ParetOPS, Continuous Improvement is not a slogan — it’s a live process.",
+        "Want a new feature or KPI? Just email us at contact@paretops.com — we build what you need.",
+        "Found a bug or issue? Report it to support@paretops.com — we fix it fast.",
+      ];
+
+      document.querySelector('#fun-fact em').textContent = funFacts[Math.floor(Math.random() * funFacts.length)];
+
+      function showMessage() {
+        if (index >= messages.length) return;
+        textElement.textContent = messages[index];
+        setTimeout(showMessage, durations[index]);
+        index++;
+      }
+
+      // Load Chart.js and its annotation plugin before loading maintenance view
+      const chartScript = document.createElement('script');
+      chartScript.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+      chartScript.onload = () => {
+        const pluginScript = document.createElement('script');
+        pluginScript.src = 'https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@1.4.0';
+        pluginScript.onload = () => {
+          
+          // Load the maintenance KPI HTML content
+          fetch('/maintenance_kpi.html')
+            .then(res => res.text())
+            .then(html => {
+              document.getElementById('kpi-content').innerHTML = html;
+
+              // Load the corresponding JavaScript logic
+              const script = document.createElement('script');
+              script.src = '/js/kpi_maintenance.js';
+              script.id = 'maintenanceScript';
+              script.onload = () => {
+                setTimeout(() => {
+                  if (typeof startMaintenanceKpiApp === 'function') {
+                    startMaintenanceKpiApp();
+                  }
+
+                 
+                }, 50);
+              };
+
+
+              document.body.appendChild(script);
+            })
+            .catch(err => {
+              console.error('❌ Failed to load maintenance KPI view:', err);
+              document.getElementById('kpi-content').innerHTML =
+                '<div class="text-danger text-center mt-4">Error loading Maintenance KPIs.</div>';
+              overlay.style.display = 'none';
+            });
+        };
+        document.body.appendChild(pluginScript);
+      };
+      document.body.appendChild(chartScript);
+    }
+
+    function loadContinuousImprovement() {
+      cleanKpiEnvironment();
+
+      fetch('/continuous_improvement_kpi.html')
+        .then(res => res.text())
+        .then(html => {
+          document.getElementById('kpi-content').innerHTML = html;
+
+          // Load Chart.js BEFORE your CI script
+          const chartScript = document.createElement('script');
+          chartScript.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+          chartScript.onload = () => {
+            const luxonScript = document.createElement('script');
+            luxonScript.src = 'https://cdn.jsdelivr.net/npm/luxon@3/build/global/luxon.min.js';
+            luxonScript.onload = () => {
+              const adapterScript = document.createElement('script');
+              adapterScript.src = 'https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1';
+              adapterScript.onload = () => {
+                const ciScript = document.createElement('script');
+                ciScript.src = '/js/kpi_continuous.js';
+                ciScript.id = 'continuousScript';
+                ciScript.onload = () => {
+                  if (typeof loadProjects === 'function') loadProjects();
+                };
+                document.body.appendChild(ciScript);
+              };
+              document.body.appendChild(adapterScript);
+            };
+            document.body.appendChild(luxonScript);
+          };
+          document.body.appendChild(chartScript);
+        })
+        .catch(err => {
+          console.error('❌ CI load failed:', err);
+          document.getElementById('kpi-content').innerHTML =
+            '<div class="text-danger text-center mt-4">Error loading CI dashboard.</div>';
+        });
+    }
+
+
+    function reloadWithVideo() {
+        // Clear cached content so the loading screen is triggered
+        productionHtml = null;
+
+        // Reset current state if needed
+        document.getElementById('kpi-content').innerHTML = `
+            <div class="text-center text-muted mt-4">Reloading KPIs...</div>
+        `;
+
+        // Start the full loading sequence
+        loadProduction(true);
+    }
+
+    document.getElementById('kpi-content').innerHTML = `
+    <div id="placeholder" class="text-center mt-5">
+        <div class="mt-4 text-muted">Please select a category above to load KPIs.</div>
+        <img src="/images/paretops.svg" alt="ParetOPS Logo" style="max-width: 600px; width: 90%;">
+    </div>
+`;
+
+
+    function cleanKpiEnvironment() {
+        // Destroy charts if they exist
+        if (window.expandedProductionChart?.destroy) {
+            window.expandedProductionChart.destroy();
+            window.expandedProductionChart = null;
+        }
+
+        if (window.expandedMaintenanceChart?.destroy) {
+            window.expandedMaintenanceChart.destroy();
+            window.expandedMaintenanceChart = null;
+        }
+
+        // Clear main content container
+        const content = document.getElementById('kpi-content');
+        if (content && current !== null) {
+          content.innerHTML = '';
+        }
+
+
+        // Remove conflicting script tags if present
+        document.getElementById('productionScript')?.remove();
+        document.getElementById('maintenanceScript')?.remove();
+
+        // Reset known shared DOM nodes by ID if they exist
+        const overlay = document.getElementById('overlay');
+        if (overlay) overlay.remove();
+
+        const kpiContainer = document.getElementById('kpiContainer');
+        if (kpiContainer) kpiContainer.remove();
+
+        // Reset global variables if needed
+        window.dataByKpi = {};
+        window.dataByKpi_maintenance = {};
+    }
+
+
+  </script>
+
+  <!-- Font Awesome for icons (used in Back button) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script src="/js/utils.js"></script>
+</body>
+</html>

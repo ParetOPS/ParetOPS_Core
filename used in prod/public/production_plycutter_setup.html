@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+  <script src="/socket.io/socket.io.js"></script>
+  <title>Production Set Up</title>
+  <style>
+    /* General styles */
+    body {
+      margin: 10px;
+      font-size: 11px;
+      background-color: #f4f6f9;
+    }
+
+    h2, h4 {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+
+    .table-container {
+      display: flex;
+      justify-content: space-around;
+      margin-top: 10px;
+      flex-wrap: wrap;
+      gap: 15px;
+    }
+
+    table {
+      width: 30%;
+      border-collapse: separate;
+      border-spacing: 0;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+      background: white;
+    }
+
+    th {
+      background-color: #007bff;
+      color: white;
+      font-size: 15px;
+      padding: 7px;
+      border-bottom: 3px solid #0056b3;
+    }
+
+    td {
+      border: 1px solid #ddd;
+      text-align: center;
+      padding: 5px;
+      padding-top: 1px;  /* Reduced top padding */
+      padding-bottom: 1px;  /* Reduced bottom padding */
+      font-size: 13px;
+    }
+
+    tr:hover {
+      background-color: #f1f1f1;
+    }
+
+    .btn {
+      margin-top: 5px;
+      font-size: 12px;
+    }
+
+    .btn-submit {
+      display: block;
+      margin: 15px auto;
+      font-size: 18px;
+      padding: 5px;
+    }
+
+    /* Ensure OBJ turns green on submit */
+    .green {
+      background-color: lightgreen;
+    }
+
+    .adjust-btn {
+      width: 30px;
+      height: 30px;
+      font-size: 18px;
+      text-align: center;
+      border-radius: 5px;
+      border: 1px solid black;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: auto;
+      background-color: #e9ecef;
+      transition: background-color 0.3s;
+    }
+
+    .adjust-btn:hover {
+      background-color: #d6d8db;
+    }
+
+    /*      Home Button Styling */
+    .home-button {
+        position: fixed;
+        top: 20px;
+        left: 20px;
+        background-color: #343a40;
+        color: white;
+        padding: 10px 12px;
+        border-radius: 6px;
+        font-size: 1.1rem;
+        text-decoration: none;
+        transition: background-color 0.2s ease-in-out;
+        box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    .home-button:hover {
+        background-color: #1d2124;
+    }
+
+    .down {
+        background-color: red !important;
+        color: white !important;
+    }
+
+    .down td {
+        font-weight: bold;
+    }
+
+    .down select, .down input, .down button {
+        pointer-events: none;  /* Disable inputs when machine is DOWN */
+        background-color: rgba(255, 0, 0, 0.3) !important;
+    }
+
+
+  </style>
+</head>
+<body>
+  <a href="/" class="home-button"><i class="fas fa-home"></i> Home</a>
+  <h2>Production Set Up</h2>
+  <div class="table-container"></div>
+
+
+  <script>
+    const socket = io();  // ✅ Ensure socket is properly initialized
+    /**
+     * Fetch helper function with error handling
+     * Ensures consistent API requests with proper logging and user feedback.
+     */
+     const plyCutters = ['PC1', 'PC2', 'PC4', 'PC5', 'PC6', 'PC7', 'PC8', 'PC9', 'PC10'];
+
+     const PROGRAM_OBJECTIVES = {
+          empty: 0,
+          '1B': 13,
+          '115B': 12,
+          'OGV': 5,
+          '9X': 8,
+          'SpaceX': 5,
+          'Autre': 5,
+      };
+
+      const programs = Object.entries(PROGRAM_OBJECTIVES).map(([value, objective]) => ({
+          value,
+          label: value === "empty" ? "empty" : value,
+          objective
+      }));
+
+
+    function fetchAPI(url, options = {}) {
+        return fetch(url, options)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status} - ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .catch(error => {
+                console.error(error);
+                alert("⚠️ An error occurred while processing the request. Please try again.");
+            });
+    }
+
+    /**
+     * Dynamically generates shift tables (SHIFT 1, SHIFT 2, SHIFT 3)
+     * Reduces redundant HTML and simplifies table management.
+     */
+     function debounce(func, delay) {
+          let timer;
+          return function(...args) {
+              clearTimeout(timer);
+              timer = setTimeout(() => func.apply(this, args), delay);
+          };
+      }
+
+     function createShiftTables() {
+        const container = document.querySelector('.table-container');
+        container.innerHTML = ''; // Clear before populating
+
+        for (let shift = 1; shift <= 3; shift++) {
+            const tableDiv = document.createElement('div');
+            tableDiv.classList.add("shift-container"); // Ensures correct styling
+            tableDiv.innerHTML = `
+                <h4>SHIFT ${shift}</h4>
+                <table id="shift${shift}-table">
+                    <thead>
+                        <tr>
+                            <th>PC</th>
+                            <th>Program</th>
+                            <th>Trainees</th>
+                            <th>Floater</th>
+                            <th>Obj</th>
+                            <th>Adjust</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+                <button class="btn btn-success btn-submit" onclick="submitShift(${shift})">Submit</button>
+            `;
+            container.appendChild(tableDiv);
+
+            //      Populate each table with ply cutter rows
+            populateTableRows(`shift${shift}-table`);
+        }
+    }
+
+    /**
+     * Populate rows inside a shift table.
+     * @param {string} tableId - ID of the table to populate
+     */
+     function populateTableRows(tableId) {
+        const table = document.getElementById(tableId);
+        if (!table) {
+            console.error(`Table ${tableId} not found!`);
+            return;
+        }
+
+        const tbody = table.querySelector('tbody');
+        tbody.innerHTML = ''; // Ensure fresh rows each time
+
+        console.log(`Populating table: ${tableId}`);
+
+        plyCutters.forEach(plyCutter => {
+            console.log(`Adding row for: ${plyCutter}`);
+
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${plyCutter}</td>
+                <td>
+                    <select class="program-select">
+                        ${programs.map(p => `<option value="${p.value}" data-obj="${p.objective}" ${p.value === 'empty' ? 'selected' : ''}>${p.label}</option>`).join('')}
+                    </select>
+                </td>
+                <td><input type="checkbox" class="trainee-checkbox"></td>
+                <td><input type="checkbox" class="floater-checkbox"></td>
+                <td class="objective">0</td>
+                <td>
+                    <button class="adjust-btn" data-change="1">+</button>
+                    <button class="adjust-btn" data-change="-1">-</button>
+                </td>
+
+            `;
+            tbody.appendChild(row);
+
+            //      Select elements
+            const programSelect = row.querySelector('.program-select');
+            const traineeCheckbox = row.querySelector('.trainee-checkbox');
+            const floaterCheckbox = row.querySelector('.floater-checkbox');
+            const objectiveCell = row.querySelector('.objective');
+            const adjustButtons = row.querySelectorAll('.adjust-btn');
+
+            function updateObjective(row) {
+                const programSelect = row.querySelector('.program-select');
+                const traineeCheckbox = row.querySelector('.trainee-checkbox');
+                const floaterCheckbox = row.querySelector('.floater-checkbox');
+                const objectiveCell = row.querySelector('.objective');
+
+                let objValue = parseInt(programSelect.selectedOptions[0].getAttribute("data-obj")) || 0;
+
+                // Apply 30% reduction if "Trainee" is checked
+                if (traineeCheckbox.checked) {
+                    objValue = Math.floor(objValue * 0.7);  // Round down
+                }
+
+                // Apply 20% increase if "Floater" is checked
+                if (floaterCheckbox.checked) {
+                    objValue = Math.ceil(objValue * 1.2);  // Round up
+                }
+
+                // Update the objective cell
+                objectiveCell.textContent = objValue;
+
+                // Remove green highlight when a change occurs
+                objectiveCell.classList.remove('green');
+            }
+
+
+
+
+            //      Attach event listeners
+            programSelect.addEventListener("change", () => {
+                updateObjective(row);
+                row.dataset.modified = "true";  //      Mark row as modified
+            });
+            traineeCheckbox.addEventListener("change", () => {
+                updateObjective(row);
+                row.dataset.modified = "true";
+            });
+            floaterCheckbox.addEventListener("change", () => {
+                updateObjective(row);
+                row.dataset.modified = "true";
+            });
+
+
+
+            //      Attach event listeners for + and - buttons
+            //      Fix for the + and - buttons
+            adjustButtons.forEach(button => {
+                button.addEventListener("click", debounce(() => {
+                    const change = parseInt(button.getAttribute("data-change")); // Get +1 or -1
+                    const objectiveCell = row.querySelector('.objective');
+                    let currentValue = parseInt(objectiveCell.textContent) || 0;
+
+                    // Ensure the new value remains non-negative
+                    let newValue = Math.max(0, currentValue + change);
+
+                    // Update the displayed value
+                    objectiveCell.textContent = newValue;
+
+                    //      Remove green highlight if changed
+                    objectiveCell.classList.remove('green');
+
+                    row.dataset.modified = "true";  //      Mark row as modified
+                }, 300));
+            });
+
+
+        });
+    }
+
+
+    /**
+     * Collects user input data for a given shift before submission.
+     * @param {number} shift - The shift number (1, 2, or 3)
+     */
+     function collectShiftData(shift) {
+            const modifiedRows = Array.from(document.querySelectorAll(`#shift${shift}-table tbody tr`))
+                .filter(row => row.dataset.modified === "true")
+                .map(row => ({
+                    plyCutter: row.cells[0].textContent,
+                    program: row.querySelector('.program-select').value,
+                    trainee: row.querySelector('.trainee-checkbox').checked,
+                    floater: row.querySelector('.floater-checkbox').checked,
+                    output_obj: parseInt(row.querySelector('.objective').textContent) || 0,
+                    submitted: true  // ✅ explicitly mark as submitted
+                }));
+
+            console.log(`🔍 Shift ${shift} - Modified rows:`, modifiedRows);
+            return modifiedRows;
+        }
+
+
+    /**
+     * Handles shift submission by sending data to the backend.
+     * @param {number} shift - The shift number being submitted
+     */
+     function submitShift(shift) {
+            const data = collectShiftData(shift);
+            const day = new Date().toISOString().split('T')[0];
+
+            if (data.length === 0) {
+                console.warn(`⚠️ No data to submit for shift ${shift}. Skipping API call.`);
+                alert(`No data to submit for Shift ${shift}. Please make changes before submitting.`);
+                return;
+            }
+            fetchAPI('/api/save-data', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ shift, day, data }),
+            }).then(result => {
+                if (result) {
+                    console.log('✅ Shift data saved:', result);
+
+                    // ✅ Fetch updated data before emitting WebSocket events
+                    fetch(`/api/get-submitted-data?day=${day}&shift=${shift}`)
+                        .then(response => response.json())
+                        .then(updatedData => {
+                            console.log(`🔴 Emitting WebSocket updates for shift ${shift}...`, updatedData);
+                            updatedData.forEach(d => {
+                                socket.emit('machineDataUpdated', {
+                                    plyCutter: d.plyCutter,
+                                    shift: shift,
+                                    day: day,
+                                    program: d.program,
+                                    obj_value: d.obj_value // ✅ Ensures correct field name
+                                });
+                            });
+                            console.log("📡 WebSocket updates sent:", updatedData);
+                        })
+                        .catch(error => console.error("❌ Error fetching updated data:", error));
+
+                    // ✅ Emit WebSocket event to refresh real-time status
+                    socket.emit('refreshRealTimeStatus');
+
+                    // ✅ Highlight submitted rows
+                    document.querySelectorAll(`#shift${shift}-table tbody tr`).forEach(row => {
+                        row.querySelector('.objective').classList.add('green');
+                    });
+                }
+            }).catch(error => {
+                console.error(`❌ API Error: ${error.message}`);
+                alert("An error occurred while submitting. Please try again.");
+            });
+        }
+    /**
+     * Loads previously submitted data and updates the UI accordingly.
+     * Ensures persistence of submitted objectives after a page refresh.
+     */
+     function loadSubmittedData() {
+            const day = new Date().toISOString().split('T')[0];
+
+            fetchAPI(`/api/get-submitted-data?day=${day}`)
+                .then(data => {
+                    if (!data || data.length === 0) {
+                        console.log('No stored data for today.');
+                        return;
+                    }
+                    console.log('Loaded submitted data:', data);
+
+                    const shiftDataMap = {};
+                    data.forEach(entry => {
+                        if (!entry.plyCutter || !entry.shift) {
+                            console.warn(`⚠️ Skipping invalid entry:`, entry);
+                            return;
+                        }
+
+                        if (!shiftDataMap[entry.shift]) {
+                            shiftDataMap[entry.shift] = [];
+                        }
+                        shiftDataMap[entry.shift].push(entry);
+                    });
+
+                    Object.entries(shiftDataMap).forEach(([shift, entries]) => {
+                        const shiftTable = document.querySelector(`#shift${shift}-table tbody`);
+                        if (!shiftTable) {
+                            console.error(`❌ Shift table for shift ${shift} not found.`);
+                            return;
+                        }
+
+                        entries.forEach(entry => {
+                            const row = Array.from(shiftTable.rows).find(r => r.cells[0].textContent.trim() === entry.plyCutter);
+                            if (!row) {
+                                console.error(`❌ Row for ${entry.plyCutter} not found in shift ${shift}.`);
+                                return;
+                            }
+
+                            // Restore Objective Value
+                            const objectiveCell = row.querySelector('.objective');
+                            objectiveCell.textContent = entry.obj_value || 0;
+
+                            // Restore Program Selection
+                            const programSelect = row.querySelector('.program-select');
+                            if (programSelect) {
+                                programSelect.value = entry.program;
+                            } else {
+                                console.error(`❌ Program dropdown not found in row ${entry.plyCutter}`);
+                            }
+
+                            // Restore Checkbox States (Trainee & Floater)
+                            row.querySelector('.trainee-checkbox').checked = Boolean(entry.trainee);
+                            row.querySelector('.floater-checkbox').checked = Boolean(entry.floater);
+
+                            // ✅ Restore green highlight based on explicitly saved submitted state
+                            if (entry.submitted) {
+                                objectiveCell.classList.add('green');
+                            } else {
+                                objectiveCell.classList.remove('green');
+                            }
+                        });
+                    });
+                })
+                .catch(error => console.error('❌ Error fetching submitted data:', error));
+        }
+
+        function fetchMachineStatuses() {
+            fetchAPI(`/api/get-all-status`).then(machineStatuses => {
+                applyMachineStatus(machineStatuses);
+            });
+        }
+
+        const downMachines = new Set();  // ✅ Keep track of all DOWN machines
+
+        function applyMachineStatus(machineStatuses) {
+            document.querySelectorAll(`#shift1-table tbody tr, #shift2-table tbody tr, #shift3-table tbody tr`)
+                .forEach(row => {
+                    const plyCutter = row.cells[0].textContent.trim();
+                    const objCell = row.querySelector('.objective');
+                    const machine = machineStatuses.find(m => m.plyCutter === plyCutter);
+
+                    if (machine && machine.status.toLowerCase() === 'down') {
+                        row.classList.add('down');  
+                        downMachines.add(plyCutter);  // ✅ Track as DOWN
+                        if (!objCell.dataset.originalValue) {
+                            objCell.dataset.originalValue = objCell.textContent;
+                        }
+                        objCell.textContent = 'DOWN';
+                    } else if (!downMachines.has(plyCutter)) {  
+                        // ✅ Only restore if the machine is NOT in the DOWN list
+                        row.classList.remove('down');  
+                        if (objCell.dataset.originalValue) {
+                            objCell.textContent = objCell.dataset.originalValue;
+                            delete objCell.dataset.originalValue;
+                        }
+                    }
+                });
+        }
+
+    /**
+     * Runs on page load: Generates tables, populates initial data, and loads previous submissions.
+     */
+     document.addEventListener('DOMContentLoaded', () => {
+        createShiftTables();
+        loadSubmittedData();  
+        fetchMachineStatuses();  // ✅ Fetch statuses when the page loads
+
+        socket.on('updateMachineStatus', (machineStatuses) => {
+            console.log("🔴 Received machine status update:", machineStatuses);
+            applyMachineStatus(machineStatuses);
+        });
+    });
+
+
+  </script>
+</body>
+</html>

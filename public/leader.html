@@ -1,0 +1,524 @@
+<!--
+  leader.html - CONFIDENTIAL - PROPERTY OF PARETOPS
+
+  For access issues or questions about functionality, contact support@paretops.com
+
+  DESCRIPTION:
+  This file defines the main interface for shift leaders using the ParetOPS platform.
+  It acts as the navigation and control hub for daily production, maintenance, and KPI management.
+  It integrates live shift tracking and allows leaders to trigger shift transitions across the system.
+
+  PURPOSE:
+  - Display the current production shift and allow shift changes (next / undo).
+  - Provide centralized access to core tools:
+    • Production Setup
+    • Real-Time Monitoring
+    • KPI Performance Dashboard
+    • Pareto Analysis
+  - Serve as the decision support portal for supervisors and operations managers.
+
+  FEATURES:
+  - Socket.IO integration to broadcast shift changes system-wide.
+  - Real-time synchronization of current shift status via REST API.
+  - Dashboard layout with modern UI (Bootstrap + custom styles).
+  - Responsive cards and styled button-based navigation.
+
+  DEPLOYMENT:
+  - Served from `/public/leader.html` after authentication (secured via POST /leader-auth).
+  - Requires backend support for GET `/api/get-current-shift` and POST `/api/update-shift`.
+  - Uses `/socket.io/socket.io.js` for WebSocket connectivity and `/js/utils.js` for helper logic.
+
+  AUTHOR:
+  Paulin Colin BANCKAERT — Dashboard version 3.0.0
+
+  VERSIONING:
+  - Version-controlled via Git. Please update version and footer after major UI or API changes.
+-->
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leader Dashboard</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <link rel="icon" type="image/png" href="/favicon.png">
+
+    <script src="/socket.io/socket.io.js"></script>
+
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f4f7fc;
+            color: #333;
+        }
+
+        /*   Home Button Styling */
+        .home-button {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background-color: #343a40;
+            color: white;
+            padding: 10px 12px;
+            border-radius: 6px;
+            font-size: 1.1rem;
+            text-decoration: none;
+            transition: background-color 0.2s ease-in-out;
+            box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        .home-button i {
+            margin-right: 5px; /* Space between icon and text */
+        }
+
+        .home-button:hover {
+            background-color: #1d2124;
+        }
+
+
+        .container {
+            max-width: 900px;
+            margin: auto;
+            padding: 30px 20px;
+            text-align: center;
+        }
+
+        /*   Title Styling */
+        h1 {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #0056b3;
+            margin-bottom: 20px;
+        }
+
+        /*   Shift Management Styling */
+        .shift-management {
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        /*   Shift Number Styling */
+        .shift-management h3 {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #0056b3;
+        }
+
+        /*   Button Styling */
+        .btn {
+            width: 260px; /* Increased width */
+            padding: 12px;
+            font-size: 1.1em;
+            font-weight: bold;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+
+        .btn-primary:hover {
+            background-color: #00408a;
+        }
+
+        .btn-secondary:hover {
+            background-color: #777;
+        }
+
+        /*   Main Menu Buttons */
+        .btn-container {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr); /* Two equal columns */
+            gap: 15px; /* Space between buttons */
+            justify-content: center;
+        }
+
+
+        /*   Card-Based Menu */
+        .menu-card {
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 600px;
+            transition: transform 0.2s ease;
+        }
+
+        .menu-card:hover {
+            transform: scale(1.03);
+        }
+
+        /*   Loader Animation */
+        .loader {
+            display: inline-block;
+            width: 15px;
+            height: 15px;
+            border: 3px solid #007bff;
+            border-radius: 50%;
+            border-top: 3px solid transparent;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .kpi-card-tall {
+            grid-row: span 2;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+
+
+        .kpi-button {
+            background-color: #0b5ed7; /* Bootstrap primary, deep and professional */
+            color: white !important;
+            font-weight: bold;
+            font-size: 1.1rem; /* Match other buttons */
+            text-transform: none;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+            height: 150px; /* Same as other buttons */
+            width: 260px;  /* Match other buttons */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: all 0.2s ease-in-out;
+        }
+
+        .kpi-button:hover {
+            background-color: #094ea5;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 14px rgba(0, 0, 0, 0.2);
+        }
+        .kpi-alert-badge {
+            position: absolute;
+            top: -10px;
+            right: -10px;
+            background-color: white;
+            color: #dc3545;
+            font-weight: 900;
+            font-size: 1.25rem;
+            padding: 8px 14px;
+            border-radius: 50%;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+            line-height: 1;
+            z-index: 3;
+        }
+
+        .footer {
+            margin-top: 40px;
+            padding: 15px;
+            font-size: 0.9em;
+            background-color: #e9ecef;
+            color: #555;
+            border-radius: 8px;
+        }
+
+        footer.footer {
+            max-width: 900px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+
+
+
+
+
+    </style>
+</head>
+<body>
+
+     <!--   Home Button -->
+    <a href="/" class="home-button"><i class="fas fa-home"></i> Home</a>
+
+
+    <div class="container">
+        <img src="/images/paretops.svg" alt="Pareto OPS">
+        <h1>Leader Dashboard</h1>
+
+        <!--   Shift Management Section -->
+        <div class="shift-management">
+            <h3>Current Shift: 
+                <span id="current-shift">
+                    <span class="loader"></span> <!--   Loader Initially -->
+                </span>
+            </h3>
+            <button onclick="startNextShift()" class="btn btn-primary">Next Shift</button>
+            <button onclick="undoShift()" class="btn btn-secondary">Undo</button>
+        </div>
+
+        <!--   Card-Based Menu -->
+        <div class="btn-container">
+            <div class="menu-card">
+                <a href="/production-setup" class="btn btn-warning">
+                    <i class="fas fa-cogs"></i> Production Set Up
+                </a>
+            </div>
+            <div class="menu-card"> 
+                <a href="/real_time_status" class="btn btn-primary">
+                    <i class="fas fa-chart-line"></i> Live Production [TV]
+                </a>
+            </div>
+            <div class="menu-card kpi-card-tall">
+                <div class="position-relative">
+                  <a href="/kpi_dashboard.html" class="btn kpi-button flex-column">
+                    <i class="fas fa-chart-bar fa-2x mb-2"></i>
+                    Performance Dashboard
+                    <span class="kpi-alert-badge">!</span>
+                  </a>
+                </div>
+            </div>
+              
+            <div class="menu-card">
+                <a href="/pareto" class="btn btn-dark">
+                    <i class="fas fa-chart-pie"></i> Pareto
+                </a>
+            </div>
+            <div class="menu-card">
+                <a href="https://www.paretops.com" class="btn btn-danger" target="_blank" rel="noopener noreferrer">
+                    <i class="fas fa-envelope"></i> About ParetOPS
+                </a>
+            </div>
+            <!-- Training -->
+            <div class="menu-card">
+            <a href="#" id="trainingBtn" class="btn btn-info">
+                <i class="fas fa-graduation-cap"></i> Training
+            </a>
+            </div>
+
+            <!-- Help Paulin  -->
+            <div class="menu-card">
+            <a
+                href="https://outlook.office.com/mail/deeplink/compose?to=paulin.banckaert@c-fan.com;contact@paretops.com&subject=ParetOPS%20request&body=Feel%20free%20to%20type%20below%20your%20request%2C%20feedback%2C%20question%2C%20or%20even%20an%20idea%20for%20a%20future%20upgrade.%20%0ATo%20make%20sure%20I%20can%20support%20you%20as%20best%20as%20possible%2C%20you%20may%20include%20(only%20if%20relevant)%3A%0A%0A1.%20**Topic%20/%20Module**%20(e.g.%2C%20Production%20Setup%2C%20Performance%20Dashboard%2C%20Maintenance%2C%20etc.)%20%0A2.%20**Date%20/%20Shift%20/%20Time**%20(if%20it%20happened%20during%20production)%20%0A3.%20**Your%20request%20or%20feedback**%20(what%20you%20would%20like%20to%20see%2C%20or%20what%20is%20unclear)%20%0A4.%20**Impact%20/%20Priority**%20(nice-to-have%2C%20blocking%2C%20urgent%2C%20improvement%20suggestion)%20%0A5.%20**Any%20screenshots%20or%20details**%20%0A%0AThanks%20for%20sharing%20your%20input!"
+                target="_blank"
+                class="btn btn-secondary"
+                title="Email Paulin (cc ParetOPS)"
+            >
+                <i class="fas fa-life-ring"></i> Help Paulin
+            </a>
+            </div>
+
+
+
+            
+        </div>
+    </div>
+
+    <!-- Overlay Training Disclaimer -->
+   <div id="trainingOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:1100; 
+     align-items:center; justify-content:center;">
+
+    <div style="background:#fff; width:95%; max-width:560px; border-radius:12px; position:relative; 
+                padding:24px 28px; box-shadow:0 8px 24px rgba(0,0,0,0.25);">
+        <!-- Close cross -->
+        <button id="trainingClose" aria-label="Close" 
+                style="position:absolute; top:10px; right:12px; border:none; background:transparent; 
+                    font-size:22px; font-weight:700; cursor:pointer;">&times;</button>
+
+        <h4 style="margin:0; color:#0056b3; font-weight:700;">Training Videos – External Link</h4>
+        <p style="margin-top:14px; font-size:1.05rem; color:#333;">
+        You are about to be redirected to an <b>external page</b> to watch training videos.
+        The information contained in these videos is <b>confidential</b> and must not be
+        <b>shared</b>, <b>downloaded</b>, or <b>redistributed</b>.
+        </p>
+
+        <label style="display:flex; gap:10px; align-items:flex-start; margin-top:10px; font-size:0.98rem;">
+        <input type="checkbox" id="trainingAcknowledge" style="margin-top:4px;">
+        <span>I understand and agree to the confidentiality notice.</span>
+        </label>
+
+        <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:18px;">
+        <button id="trainingCancel" class="btn btn-outline-secondary">Cancel</button>
+        <button id="trainingContinue" class="btn btn-primary" disabled>Continue</button>
+        </div>
+    </div>
+    </div>
+
+    <footer class="footer" style="text-align: center; padding: 2rem; background-color: #e9ecef; border-radius: 12px;">
+        <p style="margin: 0.5rem 0; color: #444; font-size: 1.1rem;">
+          &copy; 2025 <span style="font-weight: 700;">ParetOPS</span><sup style="font-size: 0.75em;">®</sup>. All Rights Reserved.
+        </p>
+        <p style="margin: 0.5rem 0; color: #444; font-size: 1.1rem;">
+          Version 3.0.2 |
+          <a href="https://www.paretops.com" target="_blank" style="color: #2a6ebb; text-decoration: none;">
+            www.paretops.com
+          </a>
+        </p>
+    </footer>
+
+<script>
+    const socket = io(); // Initialize socket connection
+
+    document.addEventListener("DOMContentLoaded", function() {
+        loadShift();
+    });
+
+    function loadShift() {
+        fetch("/api/get-current-shift")
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById("current-shift").innerHTML = data.shift; //   Replace loader with shift number
+            })
+            .catch(error => {
+                console.error("Error fetching shift data:", error);
+                document.getElementById("current-shift").innerHTML = "Error!";
+            });
+    }
+
+    function startNextShift() {
+        let shiftElement = document.getElementById("current-shift");
+        let currentShift = parseInt(shiftElement.innerText, 10);
+        let nextShift = currentShift < 3 ? currentShift + 1 : 1;
+
+        fetch('/api/update-shift', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ shift: nextShift })
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log("Shift updated:", data);
+            loadShift(); // Reload shift number
+
+            // Emit an event to notify other pages
+            socket.emit("shiftChanged", { shift: nextShift });
+        })
+        .catch(error => console.error("Error updating shift:", error));
+    }
+
+    function undoShift() {
+        let shiftElement = document.getElementById("current-shift");
+        let currentShift = parseInt(shiftElement.innerText, 10);
+        let prevShift = currentShift > 1 ? currentShift - 1 : 3;
+
+        fetch('/api/update-shift', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ shift: prevShift })
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log("Shift reverted:", data);
+            loadShift(); // Reload shift number
+
+            // Emit an event to notify other pages
+            socket.emit("shiftChanged", { shift: prevShift });
+        })
+        .catch(error => console.error("Error reverting shift:", error));
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+        // --- Elements
+        const trainingBtn = document.getElementById("trainingBtn");
+        const trainingOverlay = document.getElementById("trainingOverlay");
+        const trainingClose = document.getElementById("trainingClose");
+        const trainingCancel = document.getElementById("trainingCancel");
+        const trainingContinue = document.getElementById("trainingContinue");
+        const trainingAcknowledge = document.getElementById("trainingAcknowledge");
+
+        // 🔗 URL externe des vidéos de training (à adapter si besoin)
+        const trainingURL = "https://drive.google.com/drive/folders/1Gfy_zIle7RYblWG8cycwu5hwxdP_gr5I";
+
+        // Ouvrir l’overlay (et ne rien faire au rechargement)
+        trainingBtn.addEventListener("click", function (e) {
+        e.preventDefault();
+        trainingAcknowledge.checked = false;
+        trainingContinue.disabled = true;
+        trainingOverlay.style.display = "flex";
+        });
+
+        // Activer/désactiver le bouton Continue selon la case à cocher
+        trainingAcknowledge.addEventListener("change", function () {
+        trainingContinue.disabled = !this.checked;
+        });
+
+        // Fermer overlay (croix & Cancel)
+        function closeTrainingOverlay() {
+        trainingOverlay.style.display = "none";
+        }
+        trainingClose.addEventListener("click", closeTrainingOverlay);
+        trainingCancel.addEventListener("click", closeTrainingOverlay);
+
+        // Fermer si clic en dehors de la boîte
+        trainingOverlay.addEventListener("click", function (e) {
+        if (e.target === trainingOverlay) closeTrainingOverlay();
+        });
+
+        // Continuer : ouvrir lien externe dans un nouvel onglet
+        trainingContinue.addEventListener("click", function () {
+        if (!trainingAcknowledge.checked) return;
+        window.open(trainingURL, "_blank", "noopener,noreferrer");
+        closeTrainingOverlay();
+        });
+
+       
+
+    }); 
+</script>
+
+<!-- Overlay for Performance Dashboard -->
+<!-- Overlay for Performance Dashboard -->
+<div id="kpiOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+     background:rgba(0,0,0,0.6); z-index:1000; justify-content:center; align-items:center;">
+  <div style="background:white; padding:25px 35px; border-radius:12px; max-width:560px; text-align:center; position:relative; box-shadow:0 4px 12px rgba(0,0,0,0.3);">
+    <span id="closeOverlay" style="position:absolute; top:10px; right:15px; font-size:22px; font-weight:bold; cursor:pointer;">&times;</span>
+    <h4 style="color:#0056b3; font-weight:bold;">Performance Dashboard Notice</h4>
+    <p style="margin-top:15px; font-size:1.05rem; color:#333; line-height:1.5;">
+      The <b>KPI Dashboard</b> is now accessible.<br><br>
+      Please note that <b>data accuracy improves as more data is collected</b>. Until <b>October 31</b>, this dashboard should be considered <b>indicative only</b>.<br><br>
+      Continuous updates will automatically increase its reliability over time. Email paulin.banckaert@c-fan.com for any question or request you may have.</span>
+    </p>
+    <button id="proceedKPI" class="btn btn-primary" style="margin-top:10px;">Proceed to Dashboard</button>
+  </div>
+</div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+      const kpiButton = document.querySelector(".kpi-button");
+      const overlay = document.getElementById("kpiOverlay");
+      const closeBtn = document.getElementById("closeOverlay");
+      const proceedBtn = document.getElementById("proceedKPI");
+
+      // Show overlay on click
+      kpiButton.addEventListener("click", function(event) {
+          event.preventDefault();
+          overlay.style.display = "flex";
+      });
+
+      // Close overlay with cross
+      closeBtn.addEventListener("click", function() {
+          overlay.style.display = "none";
+      });
+
+      // Continue to KPI dashboard
+      proceedBtn.addEventListener("click", function() {
+          window.location.href = "/kpi_dashboard.html";
+      });
+
+      // Close overlay if clicking outside
+      overlay.addEventListener("click", function(e) {
+          if (e.target.id === "kpiOverlay") overlay.style.display = "none";
+      });
+  });
+</script>
+
+<script src="/js/utils.js"></script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+
+# Node.js dependencies
+node_modules/
+npm-debug.log*
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+
+# Environment
+.env
+myenv/
+
+# Editor/IDE settings
+.vscode/
+public/.vs/
+
+# Logs
+*.log
+
+# Optional database (if not critical schema)
+database/
+
+utils/reports/

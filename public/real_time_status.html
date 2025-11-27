@@ -1,0 +1,901 @@
+<!--
+  real_time_status.html - CONFIDENTIAL - PROPERTY OF PARETOPS
+
+  For technical support, contact: support@paretops.com
+
+  DESCRIPTION:
+  This HTML file displays a live real-time production dashboard for all ply cutters on the shop floor.
+  It merges machine production progress, shift data, and live machine statuses into one centralized view,
+  allowing supervisors and area coordinators to monitor current performance and address issues immediately.
+
+  PURPOSE:
+  - Visualize real-time production progress for all machines with color-coded status.
+  - Display help requests, training assignments, machine DOWN states, and program assignments.
+  - Synchronize UI updates via WebSocket events emitted by the backend or other interfaces.
+  - Alert users when production setup is not completed for the current shift.
+
+  FEATURES:
+  - WebSocket-based updates (`machineDataUpdated`, `shiftChanged`, `refreshRealTimeStatus`)
+  - Progress rings showing % completion toward objectives.
+  - Dynamic color codes (green/yellow/red) based on % progress.
+  - DOWN state rendering (static red card) and TRAINING state rendering (static white card).
+  - Auto-hide UI buttons after inactivity.
+  - Reload buttons and overlays when program setup is missing.
+
+  DEPLOYMENT:
+  - Served from `/public/real_time_status.html`
+  - Backend dependencies:
+    • `/api/get-current-shift`
+    • `/api/get-submitted-data`
+    • `/api/get-all-status`
+  - WebSocket triggers expected via Socket.IO:
+    • `machineDataUpdated`
+    • `shiftChanged`
+    • `refreshRealTimeStatus`
+
+  DEPENDENCIES:
+  - Bootstrap 4.5
+  - jQuery 3.6
+  - Font Awesome
+  - Socket.IO
+  - Custom script: `/js/utils.js`
+
+  AUTHOR:
+  Paulin Colin BANCKAERT — Real-Time Monitoring Interface v3.0.0
+
+  VERSIONING:
+  - Managed via Git. Tag any changes affecting production visuals, logic, or real-time behavior.
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Machine Production Status</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <link rel="icon" type="image/png" href="/favicon.png">
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #f8f9fa;
+            font-family: Arial, sans-serif;
+            overflow-x: hidden;
+            overflow-y: hidden;
+        }
+
+        /* Wrap everything inside this container */
+        #main-wrapper {
+            width: 100%;
+            max-width: 1920px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+
+
+        /*     Home Button Styling */
+        .home-button {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background-color: #343a40;
+            color: white;
+            padding: 10px 12px;
+            border-radius: 6px;
+            font-size: 1.1rem;
+            text-decoration: none;
+            transition: background-color 0.2s ease-in-out;
+            box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .home-button:hover {
+            background-color: #1d2124;
+        }
+
+        .header {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center; /* Center elements horizontally */
+            padding: 10px 20px;
+        }
+
+        .page-title {
+            text-align: center;
+            flex-grow: 1; /* Allows centering while keeping home button aligned */
+        }
+
+        .machine-name {
+            position: absolute;
+            top: 5px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 2em;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .progress-container, .progress-text, .extra-info {
+            min-height: 50px; /* Prevent shifting */
+        }
+        .machine-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);  /* exactement 3 colonnes */
+            gap: 20px;
+            justify-items: center;
+            align-items: center;
+            width: 100%;
+            max-width: 1400px;  /* 3 × (carte + gap) = largeur maîtrisée */
+            margin: 0 auto;     /* centre le tout */
+        }
+
+        .machine-card {
+            width: 100%;         /* carte remplit sa colonne */
+            max-width: 370px;    /* limite la largeur pour un beau rendu */
+            height: 180px;
+            background-color: #dc3545;
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 3px 3px 10px rgba(0, 0, 0, 0.2);
+            border: 2px solid black;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: relative;
+            transition: border 0.2s ease-in-out;
+        }
+
+
+        /* Enable blinking border effect */
+        .blinking-border {
+            border-width: 35px;
+        }
+
+        /* Actual blinking effect - border only */
+        @keyframes blink-border {
+            0% { border-color: white; } 
+            50% { border-color: red; }
+            100% { border-color: white; }
+        }
+
+        .blinking-border-active {
+            border-width: 10px !important;  /* Increase thickness */
+            border-style: solid;
+            border-radius: 10px; /* Keeps corners smooth */
+            animation: blink-border 0.7s infinite alternate;
+        }
+
+
+        .machine-card.green { background-color: #28a745; color: white; }
+        .machine-card.yellow { background-color: #ffc107; color: black; }
+        .machine-card.red { background-color: #dc3545; color: white; }
+
+        .progress-container {
+            width: 100px;
+            height: 100px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+        .progress-circle {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            position: absolute;
+            background: conic-gradient(green 0deg, green 0deg, rgba(255, 255, 255, 0.2) 0deg 360deg);
+            mask: radial-gradient(circle, transparent 55%, black 56%);
+            -webkit-mask: radial-gradient(circle, transparent 55%, black 56%);
+            transition: background 0.5s ease-in-out;
+        }
+
+        .progress-text {
+            font-size: 1.5em;
+            font-weight: bold;
+            position: absolute;
+            color: white;
+            top: 55%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+
+        .machine-info {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            text-align: right;
+            font-size: 1.2em;
+            flex: 1;
+        }
+        .extra-info {
+            font-size: 1em;
+            font-weight: bold;
+            min-height: 30px; /* Prevent shifting */
+        }
+
+        .issue-reported {
+            position: absolute;
+            bottom: 10px;
+            right: 15px;
+            font-size: 1em;
+            font-weight: bold;
+        }
+
+        .shift-progress-container {
+            width: 95vw;  /* Almost full screen */
+            max-width: 1800px;  /* Prevent it from being too large */
+            height: 100px;  /* Increased height for better visibility */
+            background-color: #ddd;
+            border-radius: 15px;
+            box-shadow: 0px 4px 15px rgba(0, 0, 0, 0.3);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 20px auto; /* Centers the container */
+        }
+
+
+        .progress {
+            width: 100%;
+            height: 100px;
+            background-color: #ddd;
+            border-radius: 15px;
+            box-shadow: 0px 4px 15px rgba(0, 0, 0, 0.3);
+            position: relative;
+            overflow: hidden; /* Ensures nothing overflows */
+        }
+
+        #shift-progress-bar {
+            height: 100%;
+            width: 0%;
+            background-color: yellow;
+            text-align: center;
+            font-size: 32px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center; /* Centre le texte */
+            padding-left: 0px; /* Supprime le décalage */
+            border-radius: 15px;
+            transition: width 0.7s ease-in-out;
+            position: absolute;
+            left: 0;
+            color: white; /* Rend le texte blanc */
+            font-weight: bold; /* Rend le texte en gras */
+        }
+
+        #shift-progress-bar.fixed-text {
+            justify-content: flex-end; /* Fixe le texte à droite si > 100% */
+            padding-right: 10px;
+        }
+
+        /* Ensure Training and Down cards stay white */
+        .machine-card.training,
+        .machine-card.down {
+            background-color: white !important;
+            color: black !important;
+            align-items: center;
+            justify-content: center;
+            text-align: center; /* Ensure text is centered */
+        }
+
+        .bg-success {
+            background-color: #28a745 !important; /* Bootstrap Green */
+            transition: background-color 0.5s ease-in-out;
+        }
+
+        .bg-warning {
+            background-color: #ffc107 !important; /* Bootstrap Yellow */
+            transition: background-color 0.5s ease-in-out;
+        }
+
+        .bg-danger {
+            background-color: #dc3545 !important; /* Bootstrap Red */
+            transition: background-color 0.5s ease-in-out;
+        }
+
+        .reload-button {
+            position: fixed;
+            top: 20px;
+            left: 120px; /* Adjusted position for spacing */
+            background-color: #343a40;
+            color: white;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 1.1rem;
+            text-decoration: none;
+            transition: background-color 0.2s ease-in-out;
+            box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .reload-button:hover {
+            background-color: #1d2124;
+        }
+
+        /* Ensures the icon is centered inside the button */
+        .reload-button i {
+            font-size: 1.2rem;
+        }
+
+        .logo {
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            width: 100px; /* Adjust as needed */
+            height: auto;
+        }
+
+        #home-button,
+        #reload-button {
+             transition: opacity 0.5s ease-in-out;
+        }
+
+        /* to enter logo without border*/
+        #logo-card {
+            background-color: transparent !important;
+            border: none;
+            box-shadow: none;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="main-wrapper">
+
+        <div class="header" style="display: flex; align-items: center; justify-content: center; width: 100%; position: relative;">
+            <!-- Home Button -->
+            <a href="/" class="home-button" id="home-button"><i class="fas fa-home"></i> Home</a>
+            <a href="#" class="reload-button" id="reload-button" onclick="fetchAndUpdateMachineData()">
+                <i class="fas fa-sync-alt"></i>
+            </a>
+
+        
+            <!-- Centered Title -->
+            <h2 class="page-title" id="page-title" style="margin: 0 auto;">
+                Real-Time Machine Production Status
+            </h2>
+                      
+           
+        </div>
+        
+        <div class="machine-container" id="machine-container">
+        </div>
+        <!-- Overlay if all programs are empty -->
+        <div id="program-overlay" style="
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.85);
+            color: white;
+            z-index: 9999;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            font-size: 2em;
+            padding: 40px;
+            flex-direction: column;
+        ">
+            <div id="overlay-shift-name" style="font-size: 1.8em; font-weight: bold; margin-bottom: 20px;"></div>
+            <div>Waiting on production set up by Area Coordinator</div>
+        </div>
+
+        
+    </div>
+</body>
+
+<script>
+    const socket = io();  // WebSocket connection
+
+    // These will be filled from /api/config
+    let allMachines = [];        // ex: ["M1", "M2", ...]
+    let appConfig = null;
+
+    let blinkingIntervals = {};  // Global object to store blinking intervals
+
+    function loadConfig() {
+        return fetch('/api/config')
+            .then(res => res.json())
+            .then(cfg => {
+                appConfig = cfg;
+                allMachines = cfg.machines || [];
+
+                // Fallback de sécurité si jamais il n’y a rien dans la config
+                if (!allMachines.length) {
+                    allMachines = ["M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8", "M9", "M10"];
+                }
+
+                console.log('✅ Config loaded for real-time status:', appConfig);
+            })
+            .catch(err => {
+                console.error('❌ Failed to load config, using default machines M1–M10', err);
+                allMachines = ["M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8", "M9", "M10"];
+            });
+    }
+
+    // Listen for live production data updates via WebSocket and refresh the matching machine card
+    socket.on("machineDataUpdated", (data) => {
+        console.log("🔄 Received machine data update:", data);
+
+        const { plyCutter, helpRequested = 0, program, status, obj_value, prod_value } = data;
+
+        // Locate the existing machine card
+        let machineCard = document.querySelector(`.machine-card[data-machine="${plyCutter}"]`);
+
+        if (!machineCard) {
+            console.warn(`⚠️ No existing machine card found for ${plyCutter}`);
+            return;
+        }
+
+        // Handle "DOWN" state: Preserve previous data but show "DOWN"
+        if (status && status.toUpperCase() === "DOWN") {
+            console.log(`🔴 Machine ${plyCutter} is DOWN, updating UI`);
+
+            if (!machineCard.dataset.previousContent) {
+                machineCard.dataset.previousContent = machineCard.innerHTML; // Save previous UI state
+            }
+
+            machineCard.classList.add("down");
+            machineCard.innerHTML = `
+                <div class="machine-name" style="font-size: 10em; font-weight: bold; text-align: center;">${plyCutter}</div>
+                <div style="color: red; font-size: 2em; font-weight: bold;">DOWN</div>
+            `;
+            return;
+        }
+
+        // Handle "UP" state: Restore previous UI
+        if (status && status.toUpperCase() === "UP") {
+            console.log(`🟢 Machine ${plyCutter} is UP, restoring previous UI`);
+
+            if (machineCard.dataset.previousContent) {
+                machineCard.innerHTML = machineCard.dataset.previousContent;
+                machineCard.classList.remove("down");
+            } else {
+                console.warn(`⚠️ No previous data saved for ${plyCutter}`);
+            }
+        }
+
+        // Ensure elements exist before updating
+        const programElement = machineCard.querySelector('.program-name');
+        if (programElement) {
+            programElement.innerHTML = `Program: ${program || "N/A"}`;
+        }
+
+        const objElement = machineCard.querySelector('.machine-info div:nth-child(3)');
+        const prodElement = machineCard.querySelector('.machine-info div:nth-child(4)');
+        if (objElement && prodElement) {
+            if (typeof obj_value !== 'undefined' && obj_value !== null) {
+                objElement.innerHTML = `OBJ: ${obj_value}`;
+            }
+            if (typeof prod_value !== 'undefined' && prod_value !== null) {
+                prodElement.innerHTML = `PROD: ${prod_value}`;
+            }
+        }
+
+
+        // ✅ Handle "Call for Help" Button Flashing 
+        const callButton = machineCard.querySelector(".button-call");
+        if (callButton) {
+            if (helpRequested) {
+                console.log(`🔴 Help requested! Blinking enabled for ${plyCutter}`);
+                callButton.classList.add("flash-call");
+            } else {
+                console.log(`✅ Help resolved. Blinking disabled for ${plyCutter}`);
+                callButton.classList.remove("flash-call");
+            }
+        }
+
+        //  Blinking Border on Matching Card
+        if (helpRequested) {
+            console.log(`🔴 Help requested! Adding blinking border to ${plyCutter}`);
+            machineCard.classList.add("blinking-border-active");
+        } else {
+            console.log(`✅ Help resolved. Removing blinking border from ${plyCutter}`);
+            machineCard.classList.remove("blinking-border-active");
+        }
+
+        if (prodElement) {
+            prodElement.innerHTML = `PROD: ${prod_value !== undefined && prod_value !== -1 ? prod_value : prodElement.innerHTML.split(': ')[1]}`;
+        }
+
+        // ✅ Update progress circle safely
+        const progressCircle = machineCard.querySelector('.progress-circle');
+        const progressText = machineCard.querySelector('.progress-text');
+        const prevOBJ = parseInt(objElement.innerText.split(": ")[1]) || 0;
+        const prevPROD = parseInt(prodElement.innerText.split(": ")[1]) || 0;
+
+        // Keep previous values if undefined
+        const updatedOBJ = (typeof obj_value !== 'undefined' && obj_value !== null) ? obj_value : prevOBJ;
+        const updatedPROD = (typeof prod_value !== 'undefined' && prod_value !== null) ? prod_value : prevPROD;
+
+        let progressPercentage = updatedOBJ > 0 ? Math.round((updatedPROD / updatedOBJ) * 100) : 0;
+        if (progressCircle && progressText) {
+            progressCircle.style.background = `conic-gradient(white ${progressPercentage * 3.6}deg, rgba(255, 255, 255, 0.2) ${progressPercentage * 3.6}deg 360deg)`;
+            progressText.innerText = `${progressPercentage}%`;
+            console.log(`🔄 Updated progress for ${plyCutter}: ${progressPercentage}%`);
+        }
+
+        // ✅ Update background color based on progress
+        machineCard.classList.remove("bg-success", "bg-warning", "bg-danger");
+        if (progressPercentage >= 100) {
+            machineCard.classList.add("bg-success");  // 🟢 Green
+        } else if (progressPercentage >= 70) {
+            machineCard.classList.add("bg-warning");  // 🟡 Yellow
+        } else {
+            machineCard.classList.add("bg-danger");   // 🔴 Red
+        }
+    });
+
+    // Reload all machine data when machine status changes (e.g. UP or DOWN)
+    socket.on("updateMachineStatus", () => {
+        console.log("🔄 Detected status change — refreshing data");
+        fetchAndUpdateMachineData();  // This is the function that reloads everything
+    });
+
+    // Reload the screen when a shift change is triggered from any client
+    socket.on("shiftChanged", (data) => {
+        fetchAndUpdateMachineData();  // Re-fetch and re-merge all relevant data
+    });
+
+    // Refresh the production status when triggered from production_plycutter_setup
+    socket.on('refreshRealTimeStatus', () => {
+        console.log("🔄 Refresh event received. Reloading real-time status...");
+        fetchAndUpdateMachineData(); //  Refresh the displayed data
+    });
+
+    // Get the current date string formatted for Austin timezone (used for API queries)
+    function getCurrentDate() {
+        const today = new Date();
+        return getAustinDateString(); //  Uses centralized, accurate helper 
+    }
+
+    // Manually trigger a refresh of production data from the backend
+    function fetchUpdatedProductionData() {
+        fetch("/api/get-submitted-data?day=" + getCurrentDate() + "&shift=" + document.getElementById("shift-name").innerText.split(": ")[1])
+            .then(response => response.json())
+            .then(data => {
+                updateMachineCards(data); // Refresh the production status
+            })
+            .catch(error => console.error("Error fetching updated production data:", error));
+    }
+
+    // Re-render the UI for all machine cards based on current data (status, progress, etc.)
+    function updateMachineCards(data) {
+const container = document.getElementById("machine-container");
+
+// Clear all existing machine cards (including previous logo)
+container.innerHTML = "";
+
+console.log("📦 Received merged machine data:", data);
+
+// Create a lookup dictionary for machine data, indexed by machine name
+const machineData = {};
+data.forEach(machine => {
+    console.log("🔍 Checking machine data:", machine);
+    if (machine.plyCutter && machine.obj_value !== undefined && machine.prod_value !== undefined) {
+        machineData[machine.plyCutter] = {
+            obj_value: parseInt(machine.obj_value),
+            prod_value: parseInt(machine.prod_value),
+            program: machine.program || "N/A",
+            trainee: machine.trainee === true || machine.trainee === 1,
+            floater: machine.floater === true || machine.floater === 1,
+            status: machine.status || "UP",
+            shift: machine.shift || "N/A"
+        };
+    } else {
+        console.warn("⚠️ Skipping machine with missing values:", machine);
+    }
+});
+
+// Show program overlay if ALL programs are N/A (even for machines marked DOWN)
+const allProgramsEmpty = data.every(m =>
+    !m.program || m.program.trim().toUpperCase() === "N/A"
+);
+
+const overlay = document.getElementById("program-overlay");
+const shiftName = document.getElementById("shift-name")?.innerText || "Shift: ?";
+const overlayShiftName = document.getElementById("overlay-shift-name");
+
+if (allProgramsEmpty) {
+    overlay.style.display = "flex";
+    if (overlayShiftName) overlayShiftName.innerText = shiftName;
+} else {
+    overlay.style.display = "none";
+}
+
+// Render a card for each known machine
+allMachines.forEach(machineName => {
+    const machine = machineData[machineName] || {
+        obj_value: 0,
+        prod_value: 0,
+        program: "N/A",
+        trainee: false,
+        floater: false,
+        status: "UP",
+        shift: "N/A"
+    };
+
+    // Render a special DOWN card if machine is marked DOWN
+    if (machine.status === "DOWN") {
+        console.log(`🔴 Machine ${machineName} is marked DOWN`);
+        const downCard = document.createElement("div");
+        downCard.className = "machine-card down";
+        downCard.setAttribute("data-machine", machineName);
+        downCard.innerHTML = `
+            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
+                <div class="machine-name">${machineName}</div>
+                <div style="color: red; font-size: 3em; font-weight: bold; text-align: center;">DOWN</div>
+            </div>
+        `;
+        container.appendChild(downCard);
+        return; // Skip remaining rendering logic
+    }
+
+    // Render a white TRAINING card if assigned to a trainee
+    if (machine.trainee) {
+        const traineeCard = document.createElement("div");
+        traineeCard.className = "machine-card training";
+        traineeCard.setAttribute("data-machine", machineName);
+        traineeCard.innerHTML = `
+            <div class="machine-name plyCutter-title" style="font-size: 2.3em; font-weight: bold; text-align: center; width: 100%;">${machineName}</div>
+            <div class="machine-info">
+                <div class="program-name">Program: ${machine.program}</div>
+                <div style="font-size: 2em; font-weight: bold; text-align: center; width: 100%;">TRAINING</div>
+            </div>
+        `;
+        container.appendChild(traineeCard);
+        return;
+    }
+
+    // Default rendering logic for an active machine
+    const obj_value = parseInt(machine.obj_value) || 0;
+    const prod_value = parseInt(machine.prod_value) || 0;
+    const progressPercentage = obj_value > 0 ? Math.round((prod_value / obj_value) * 100) : 0;
+
+    let progressColor = "white";
+    if (progressPercentage >= 100) progressColor = "green";
+    else if (progressPercentage >= 70) progressColor = "yellow";
+    else if (progressPercentage > 0) progressColor = "red";
+
+    console.log(`🛠 Rendering machine ${machineName} → OBJ: ${obj_value}, PROD: ${prod_value}, %: ${progressPercentage}`);
+
+    const machineCard = document.createElement("div");
+    machineCard.className = `machine-card ${progressColor}`;
+    machineCard.setAttribute("data-machine", machineName);
+    machineCard.setAttribute("data-shift", machine.shift);
+
+    // Build progress circle
+    const progressContainer = document.createElement("div");
+    progressContainer.className = "progress-container";
+
+    const progressCircle = document.createElement("div");
+    progressCircle.className = "progress-circle";
+    progressCircle.style.background = `conic-gradient(white ${progressPercentage * 3.6}deg, rgba(255, 255, 255, 0.2) ${progressPercentage * 3.6}deg 360deg)`;
+
+    const progressText = document.createElement("div");
+    progressText.className = "progress-text";
+    progressText.innerText = `${progressPercentage}%`;
+
+    progressContainer.appendChild(progressCircle);
+    progressContainer.appendChild(progressText);
+    machineCard.appendChild(progressContainer);
+
+    // Build machine info panel
+    machineCard.innerHTML += `
+        <div class="machine-info">
+            <div class="machine-name plyCutter-title">${machineName}</div>
+            <div class="program-name">Program: ${machine.program}</div>
+            <div>OBJ: ${obj_value}</div>
+            <div>PROD: ${prod_value}</div>
+        </div>
+    `;
+
+    container.appendChild(machineCard);
+});
+
+// Append logo card at the end
+const logoCard = document.createElement("div");
+logoCard.className = "machine-card";
+logoCard.id = "logo-card";
+logoCard.style.justifyContent = "center";
+logoCard.style.alignItems = "center";
+logoCard.style.backgroundColor = "white";
+logoCard.style.border = "none";
+logoCard.style.boxShadow = "none";
+
+const logoImg = document.createElement("img");
+logoImg.src = "/images/paretops.svg";
+logoImg.alt = "Pareto OPS";
+logoImg.style.maxHeight = "80px";
+logoImg.style.width = "auto";
+
+logoCard.appendChild(logoImg);
+container.appendChild(logoCard);
+}
+
+    // Fetches the current shift (or uses a provided one), then retrieves and merges status and production data
+    // Finally updates the UI based on the merged machine state
+    function fetchAndUpdateMachineData(providedShift = null) {
+        const currentDay = getCurrentDate();
+
+        // Step 1: Determine the shift (from argument or backend)
+        const fetchShift = providedShift
+            ? Promise.resolve({ shift: providedShift })
+            : fetch('/api/get-current-shift').then(res => res.json());
+
+        fetchShift
+            .then(shiftData => {
+                if (!shiftData.shift) {
+                    console.error("❌ Shift data is missing!");
+                    return;
+                }
+
+                const shift = shiftData.shift;
+
+                // Step 2: Update shift name on screen
+                const shiftElement = document.getElementById("shift-name");
+                if (shiftElement) shiftElement.innerText = "Shift: " + shift;
+
+                const titleElement = document.getElementById("page-title");
+                if (titleElement) titleElement.innerText = `Real-Time Machine Production Status – Shift ${shift}`;
+
+                // Step 3: Fetch both machine status and production data
+                return Promise.all([
+                    fetch(`/api/get-all-status`).then(res => res.json()),
+                    fetch(`/api/get-submitted-data?shift=${shift}&day=${currentDay}`).then(res => res.json())
+                ]);
+            })
+            .then(([statusData, prodData]) => {
+                if (!statusData || !prodData) {
+                    console.error("❌ Missing machine status or production data!");
+                    return;
+                }
+
+                console.log("✅ Data fetched after refresh:", { statusData, prodData });
+
+                // Step 4: Merge data from status and production tables for each known machine
+                const mergedData = allMachines.map(machineName => {
+                    const machineProdData = prodData.find(m => m.plyCutter === machineName) || {};
+                    const machineStatus = statusData.find(s => s.plyCutter === machineName) || {};
+
+                    return {
+                        plyCutter: machineName,
+                        obj_value: machineProdData.obj_value || 0,
+                        prod_value: machineProdData.prod_value || 0,
+                        program: machineProdData.program || "N/A",
+                        floater: machineProdData.floater || false,
+                        trainee: machineProdData.trainee || false,
+                        help_requested: machineStatus.help_requested || 0,
+                        status: machineStatus.status || "UP"
+                    };
+                });
+
+                // Step 5: Update machine UI cards based on the merged data
+                updateMachineCards(mergedData);
+
+                // Step 6: Restore blinking borders for machines requesting help
+                mergedData.forEach(machine => {
+                    if (machine.help_requested) {
+                        console.log(`🔴 Restoring blinking for ${machine.plyCutter}`);
+                        const machineCard = document.querySelector(`.machine-card[data-machine="${machine.plyCutter}"]`);
+                        if (machineCard) {
+                            machineCard.classList.add("blinking-border-active");
+                        }
+                    }
+                });
+            })
+            .catch(error => console.error('❌ Error fetching data:', error));
+    }
+
+    // Initial page load logic: fetch current shift, fetch production/status data, then display it
+    document.addEventListener("DOMContentLoaded", () => {
+        console.log("🔄 Page loaded, loading config then fetching initial data...");
+
+        // 1) Charger la config (machines, company, etc.)
+        loadConfig()
+            .then(() => {
+                // 2) Puis seulement après, récupérer le shift courant
+                return fetch("/api/get-current-shift").then(response => response.json());
+            })
+            .then(shiftData => {
+                if (!shiftData || !shiftData.shift) {
+                    console.error("❌ Shift data is missing!");
+                    return;
+                }
+
+                const currentDay = getCurrentDate();
+
+                // Titre dynamique (optionnel : tu peux l'ajuster comme tu veux)
+                const titleElement = document.getElementById("page-title");
+                if (titleElement) {
+                    const companyName = appConfig?.company?.name || 'Real-Time Machine Production Status';
+                    titleElement.innerText = `${companyName} – Shift ${shiftData.shift}`;
+                }
+
+                const shiftElement = document.getElementById("shift-name");
+                if (shiftElement) {
+                    shiftElement.innerText = "Shift: " + shiftData.shift;
+                }
+
+                // 3) En parallèle : status machines + données de prod
+                return Promise.all([
+                    fetch(`/api/get-all-status`).then(res => res.json()),
+                    fetch(`/api/get-submitted-data?shift=${shiftData.shift}&day=${currentDay}`).then(res => res.json())
+                ]);
+            })
+            .then(([statusData, prodData]) => {
+                if (!statusData || !prodData) {
+                    console.error("❌ Missing machine status or production data!");
+                    return;
+                }
+
+                console.log("✅ Data fetched after reload:", { statusData, prodData });
+
+                // 4) Merge des données sur la base de allMachines (issu de la config)
+                const mergedData = allMachines.map(machineName => {
+                    const machineProdData = prodData.find(m => m.plyCutter === machineName) || {};
+                    const machineStatus = statusData.find(s => s.plyCutter === machineName) || {};
+
+                    return {
+                        plyCutter: machineName,
+                        obj_value: machineProdData.obj_value || 0,
+                        prod_value: machineProdData.prod_value || 0,
+                        program: machineProdData.program || "N/A",
+                        floater: machineProdData.floater || false,
+                        trainee: machineProdData.trainee || false,
+                        status: machineStatus.status || "UP"
+                    };
+                });
+
+                // 5) Affichage
+                updateMachineCards(mergedData);
+            })
+            .catch(error => console.error('❌ Error during initial load:', error));
+    });
+
+
+</script>
+<script>
+    let hideButtonsTimeout;
+    
+    function hideButtons() {
+        document.getElementById("home-button").style.opacity = "0";
+        document.getElementById("reload-button").style.opacity = "0";
+    }
+    
+    function showButtons() {
+        document.getElementById("home-button").style.opacity = "1";
+        document.getElementById("reload-button").style.opacity = "1";
+    }
+    
+    function resetTimer() {
+        showButtons();
+        clearTimeout(hideButtonsTimeout);
+        hideButtonsTimeout = setTimeout(hideButtons, 5000); // 5s
+    }
+    
+    document.addEventListener("mousemove", resetTimer);
+    document.addEventListener("touchstart", resetTimer); // for tablets
+    
+    // Start timer on page load
+    window.onload = resetTimer;
+</script>
+      
+    <script src="/js/utils.js"></script>
+</body>
+</html>

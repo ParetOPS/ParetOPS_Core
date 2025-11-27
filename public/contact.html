@@ -1,0 +1,93 @@
+<!--
+  contact.html - CONFIDENTIAL - PROPERTY OF PARETOPS
+
+  Please contact support@paretops.com for maintenance or update requests.
+
+  DESCRIPTION:
+  This HTML document displays the public-facing "About" and "Contact Us" section of the ParetOPS software platform.
+  It is intended to inform users, clients, and collaborators about the scope, value, and available contact channels
+  for the ParetOPS product.
+
+  PURPOSE:
+  This static page serves the following roles:
+  1. Introduction to ParetOPS — what it is and the problems it solves.
+  2. Listing of core features: KPI dashboards, real-time monitoring, DMAIC tools, etc.
+  3. Highlights of collaboration opportunities and openness to feedback.
+  4. Contact information and outreach methods for interested stakeholders.
+
+  TECHNOLOGIES USED:
+  - HTML5 and CSS3 for structure and styling.
+  - Bootstrap 5.3 for responsive layout and UI consistency.
+  - This file is served as static content through Express (Node.js backend).
+  
+  DEPLOYMENT:
+  - This file is stored under /public/contact.html.
+  - It is accessible via the `/contact` route on the server.
+  - No user authentication is required to view this page.
+
+  AUTHOR:
+  Paulin Colin BANCKAERT — Last updated for ParetOPS v3.0.0
+
+  VERSIONING:
+  - This file is tracked under Git.
+  - Any changes must be committed with clear version tags and tested in staging.
+-->
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>About ParetOPS</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      padding: 2rem;
+      max-width: 900px;
+      margin: auto;
+    }
+    h1, h2 {
+      margin-top: 2rem;
+    }
+    blockquote {
+      font-style: italic;
+      color: #555;
+      border-left: 4px solid #ccc;
+      padding-left: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <a href="/leader.html" class="btn btn-outline-secondary mb-4" style="position: absolute; top: 20px; left: 20px;">← Back</a>
+
+  <h1 class="text-center">🧩 About ParetOPS</h1>
+
+  <h2>🔍 What is ParetOPS?</h2>
+  <p><strong>ParetOPS</strong> is a lean production optimization platform designed to <strong>monitor</strong>, <strong>analyze</strong>, and <strong>improve</strong> the performance of manufacturing equipment — with a current focus on <strong>ply cutters</strong>. Developed in close collaboration with operators and industrial engineers, it aims to deliver <strong>real-time insights</strong> and <strong>data-driven decisions</strong> for smarter shop floor management.</p>
+  <blockquote>"Without data, you're just another person with an opinion." — W. Edwards Deming</blockquote>
+
+  <h2>💼 What We Offer</h2>
+  <ul>
+    <li><strong>Real-time Production Monitoring</strong><br>Track output, downtime, and help requests across machines.</li>
+    <li><strong>KPI Dashboard</strong><br>Customizable KPIs for <em>availability</em>, <em>efficiency</em>, <em>utilization</em>, and <em>maintenance</em>.</li>
+    <li><strong>Continuous Improvement Toolkit</strong><br>DMAIC project tracking, root cause analysis, and performance trends.</li>
+    <li><strong>Lean Integration</strong><br>Designed to support Six Sigma, TPM, and operational excellence initiatives.</li>
+  </ul>
+
+  <h2>📢 Opportunities</h2>
+  <p>We're always open to:</p>
+  <ul>
+    <li><strong>Pilots and Collaborations</strong> with industrial partners</li>
+    <li><strong>Feedback</strong> from operators, engineers, and managers</li>
+  </ul>
+  <p><strong>📬 Want to partner with us? Join the early adopters’ circle? </strong></p>
+
+  <h2>📬 Contact Us</h2>
+  <ul>
+    <li><strong>Email:</strong> contact@paretops.com</li>
+    <li><strong>LinkedIn:</strong> <a href="#">LinkedIn Page</a></li>
+    <li><strong>Website:</strong> www.paretops.com</li>
+  </ul>
+</body>
+</html>

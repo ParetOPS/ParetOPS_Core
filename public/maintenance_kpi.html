@@ -1,0 +1,778 @@
+<!--
+  maintenance_kpi.html - CONFIDENTIAL - PROPERTY OF PARETOPS
+
+  For support or feedback, contact support@paretops.com
+
+  DESCRIPTION:
+  This HTML file is the main visual dashboard for maintenance KPIs in the ParetOPS platform.
+  It provides key metrics, machine-level benchmarks, and contributor analysis to evaluate and improve
+  the performance of maintenance activities across all ply cutters.
+
+  PURPOSE:
+  - Display historical and real-time maintenance KPIs using interactive charts and panels.
+  - Identify top contributors to downtime, benchmark machine performance, and trigger root cause exploration.
+  - Provide shift leaders and reliability engineers with actionable insights for preventive measures.
+
+  FEATURES:
+  - Interactive KPI cards with expandable views and threshold settings.
+  - Machine benchmarking system combining MTBF, MDT, and total downtime.
+  - Dynamic charting via Chart.js and plugin-based annotation.
+  - Machine status summary with reloadable panels.
+  - Fully responsive layout using custom grid and Flexbox.
+
+  DEPLOYMENT:
+  - Served from `/public/maintenance_kpi.html` through the KPI Dashboard.
+  - Depends on the script `/kpi_maintenance.js` to fetch data and populate visuals.
+  - Optional data filters are persisted client-side via DOM or overlay states.
+
+  DEPENDENCIES:
+  - Chart.js and chartjs-plugin-annotation for visualization.
+  - Font Awesome for iconography.
+  - Custom script `/kpi_maintenance.js` for backend API integration and overlay logic.
+  - `/js/utils.js` for shared helper functions.
+
+  AUTHOR:
+  Paulin Colin BANCKAERT — Maintenance KPI Dashboard v3.0.0
+
+  VERSIONING:
+  - Managed under Git. Any changes to chart logic or layout structure should be tagged accordingly.
+-->
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Maintenance KPIs</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@1.4.0"></script>
+  <link rel="icon" type="image/png" href="/favicon.png">
+
+  
+
+
+  <style>
+    body {
+      background-color: #f8f9fa;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+    }
+
+    .section-title {
+        display: flex;
+        align-items: center;
+        text-align: center;
+        margin-bottom: 1.5rem;
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #333; /* ✅ neutral dark */
+        font-family: 'Inter', sans-serif;
+    }
+
+    .section-title::before,
+    .section-title::after {
+        content: '';
+        flex: 1;
+        border-bottom: 1px solid #ccc; /* ✅ fine gray line */
+        margin: 0 12px;
+    }
+
+
+
+    .main-wrapper {
+      max-width: 1250px;
+      margin: 0 auto;
+    }
+
+    .alert-header {
+      background-color: white;
+      border-radius: 12px;
+      border: 1px solid rgba(0, 0, 0, 0.2);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      padding: 1rem;
+      margin-bottom: 1rem;
+      text-align: center;
+      font-weight: bold;
+    }
+
+    .dashboard {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .col-66 {
+      flex: 0 0 61%;
+      max-width: 61%;
+    }
+
+    .col-33 {
+      flex: 0 0 37%;
+      max-width: 37%;
+    }
+
+    .panel {
+      background: white;
+      border-radius: 12px;
+      border: 1px solid rgba(0, 0, 0, 0.2);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .kpi-section {
+        background: transparent;
+        border: none;
+        box-shadow: none;
+        padding: 0;
+        margin-bottom: 1rem;
+    }
+
+
+    .kpi-grid {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 1.5rem;
+    }
+
+
+
+    .kpi-card {
+        background-color: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        padding: 1rem;
+        height: 370px;
+        width: 350px;
+        aspect-ratio: 1 / 1;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        border: 1px solid rgba(0, 0, 0, 0.2);
+    }
+
+    .kpi-name {
+        font-weight: bold;
+        margin-bottom: 0.5rem;
+        text-align: center;
+    }
+
+    .expand-btn {
+        position: absolute;
+        background-color: #fff;
+        border-radius: 50%;
+        border: 1px solid #ccc;
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        cursor: pointer;
+        z-index: 2;
+    }
+
+    .expand-btn {
+        top: -8px;
+        right: -16px;
+    }
+
+    .info-btn {
+      position: absolute;
+      top: 28px;
+      right: -16px;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: #fff;
+      border-radius: 50%;
+      border: 1px solid #ccc;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+      cursor: pointer;
+      z-index: 2;
+    }
+    
+    .info-btn i {
+      pointer-events: none;
+    }
+
+    .info-bubble {
+      position: absolute;
+      top: 36px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: white;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 0.75rem;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+      font-size: 0.9rem;
+      z-index: 9999;
+    }
+
+
+
+    .machine-tile {
+        border-radius: 10px;
+        padding: 0.5rem 0.75rem;
+        margin-bottom: 0.4rem;
+        color: white;
+        font-weight: 600;
+        font-size: 0.85rem;
+        display: flex;
+        box-shadow: none;
+    }
+
+    .benchmarking-title {
+        margin-bottom: 0.5rem;  /* or 0.25rem for tighter spacing */
+    }
+
+
+
+    .machine-up {
+        background: linear-gradient(145deg, #28a745, #218838);
+        border: 1px solid #1e7e34;
+    }
+
+    .machine-down {
+        background: linear-gradient(145deg, #dc3545, #c82333);
+        border: 1px solid #bd2130;
+    }
+    .machine-label {
+        font-size: 1.2rem;
+        font-weight: 600;
+        min-width: 45px;
+        max-width: 60px;
+        white-space: nowrap;
+        display: flex;
+        align-items: center;
+    }
+
+    .machine-status-block {
+        font-size: 0.85rem;
+        font-weight: normal;
+        opacity: 0.9;
+        line-height: 1.2;
+        white-space: normal;
+        flex: 1;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    .machine-status-line-up {
+        font-size: 1.1rem;
+        font-weight: 600;
+        text-align: right;
+    }
+
+    .machine-status-line-down {
+        font-size: 0.95rem;
+        font-weight: bold;
+        margin-bottom: 0.25rem;
+    }
+
+
+
+    .machine-duration {
+        margin-left: 1rem;
+        font-size: 0.9rem;
+        opacity: 0.9;
+    }
+
+    .machine-duration div {
+        font-size: 0.95rem;
+        line-height: 1.1;
+        word-break: break-word;
+    }
+
+    .machine-status-text {
+        font-size: 0.9rem;
+        font-weight: normal;
+        opacity: 0.9;
+    }
+
+    .machine-extra {
+        font-size: 0.75rem;
+        font-weight: normal;
+        opacity: 0.85;
+        line-height: 1.2;
+        white-space: normal;
+        margin-left: 1rem;
+    }
+
+    .overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+    }
+
+    .overlay-content {
+        background: white;
+        padding: 2rem;
+        border-radius: 12px;
+        max-width: 1000px;
+        width: 90vw;
+        max-height: 100vh;
+        overflow-y: auto;
+        box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+    }
+
+    @keyframes bounce {
+        0%, 100% {
+            transform: translateY(0);
+        }
+        50% {
+            transform: translateY(-4px);
+        }
+    }
+
+
+    .expand-btn:hover,
+    .info-btn:hover,
+    .machine-tile:hover {
+    animation: bounce 0.4s ease;
+    }
+
+    /*CSS for the benchmark */
+    .card {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      padding: 6px;
+      text-align: center;
+      width: 160px;
+      height: 185px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.3s ease;
+      animation: none;
+
+    }
+
+    .card-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin-top: 4px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid #ddd;
+        width: 100%;
+        text-align: center;
+    }
+
+    .kpi-lines {
+        margin-top: 0.4rem;
+        font-size: 13.5px;
+        width: 100%;
+    }
+
+    .kpi-line {
+        display: flex;
+        justify-content: space-between;
+        padding: 2px 4px;
+        color: #333;
+        font-weight: 400;
+        font-size: 11px;
+    }
+
+
+    .circle {
+        position: relative;
+        width: 60px;
+        height: 60px;
+    }
+ 
+    .circle svg {
+      transform: rotate(-90deg);
+      width: 50px;
+      height: 50px;
+      display: block;
+      margin: 0 auto;
+    }
+    .circle circle {
+        fill: none;
+        stroke-width: 10;
+    }
+    .circle .bg {
+        stroke: #eee;
+    }
+    .circle .progress {
+        stroke-linecap: round;
+        transition: stroke-dashoffset 1s;
+    }
+    .circle .score-text {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 22px;
+        font-weight: bold;
+    }
+    .trend.up::before {
+        content: '⬆';
+        color: #2e7d32;
+    }
+    .trend.down::before {
+        content: '⬇';
+        color: #c62828;
+    }
+    .trend {
+        font-size: 9px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+    .kpi-green { color: #2e7d32; font-weight: bold; }
+    .kpi-red { color: #c62828; font-weight: bold; }
+    .title {
+      font-size: 24px;
+      font-weight: bold;
+      margin-top: 2px;
+    }
+
+    #benchmarkingContent {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        max-width: 732px;
+        margin: 0 auto;
+        gap: 10px;
+        padding-top: 10px;
+    }
+
+    .details {
+      font-size: 13px;
+      color: #555;
+      line-height: 1.2;
+      margin-bottom: 2px;
+    }
+
+    .card:hover {
+        animation: bounce 0.4s ease 1;
+    }
+
+    #logContent .log-entry {
+        border-bottom: 1px solid #ddd;
+        padding: 0.75rem 0;
+        font-size: 0.95rem;
+    }
+
+    #logContent .log-entry strong {
+        color: #333;
+    }
+
+    #logContent .log-entry small {
+        display: block;
+        color: #666;
+    }
+
+    #logContent .log-entry em {
+        font-style: italic;
+        color: #444;
+    }
+
+    .info-icon {
+        position: relative;              /* Required for inner absolute children */
+        display: inline-block;           /* Prevents layout breaking */
+        font-size: 1rem;
+        margin-left: 8px;
+        cursor: pointer;
+        background: #eee;
+        border-radius: 50%;
+        padding: 4px 8px;
+        font-weight: bold;
+        z-index: 10;
+    }
+
+
+
+    #benchmarkInfoBubble {
+        position: absolute;
+        background-color: white;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        padding: 0.75rem;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        font-size: 0.9rem;
+        z-index: 10;
+    }
+
+    /*Alert*/
+    .alert-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: center;
+  padding: 0.5rem 0;
+}
+
+.alert-box {
+  background-color: #fdfdfd;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  padding: 1rem 1.2rem;
+  min-width: 240px;
+  max-width: 260px;
+  box-shadow: none;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.alert-title {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #222;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #e0e0e0;
+  text-transform: none;
+  letter-spacing: 0px;
+}
+
+.alert-header-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-weight: 500;
+  color: #222;
+}
+
+.alert-body {
+  color: #333;
+}
+
+.alert-box strong {
+  font-weight: 600;
+}
+
+/* Variants */
+.info {
+  background-color: #e7f1ff;
+  border-left: 4px solid #0d6efd;
+}
+
+.critical {
+  background-color: #fde2e2;
+  border-left: 4px solid #dc3545;
+}
+
+.warning {
+  background-color: #fff9db;
+  border-left: 4px solid #ffc107;
+}
+
+.soft {
+  background-color: #f7f7f7;
+  border-left: 4px solid #6c757d;
+}
+
+.bounce-click:hover {
+  animation: bounce 0.4s ease;
+}
+
+/*used for downtime kpis*/
+#downtimeDetailOverlay .btn-primary {
+  color: white !important;
+}
+
+
+/* used for alerts styling*/
+.alert-success {
+  background-color: #e9f9ef;
+  border-left: 4px solid #28a745;
+}
+
+.alert-warning {
+  background-color: #fff9db;
+  border-left: 4px solid #ffc107;
+}
+
+.alert-danger {
+  background-color: #fdecea;
+  border-left: 4px solid #dc3545;
+}
+
+#expandedChart {
+  max-height: 380px;
+}
+
+
+
+
+
+  </style>
+</head>
+<body>
+    <div class="main-wrapper">
+      <div class="top-row" style="display: flex; gap: 1rem; margin-bottom: 1rem; max-width: 1220px; margin-left: 20px; margin-right: auto;">
+        <!-- Downtime Panel -->
+        <div class="panel bounce-click" style="width: 250px;">
+          <div style="font-size: 1.5rem; font-weight: 700; font-family: 'Inter', sans-serif; color: #333; margin-bottom: 0.4rem;">
+            Unplanned downtime
+          </div>
+          <div id="downtimeCardRange" style="font-size: 0.9rem; color: #666; font-style: italic; margin-bottom: 1rem;">
+            (Past 30 days)
+          </div>
+        
+          <div id="downtimeCardTotal" style="font-size: 1.8rem; font-weight: bold; color: #333;">…</div>
+          <div id="downtimeCardDelta" style="font-size: 1rem; font-weight: bold;">…</div>
+        </div>
+        
+      
+        <!-- Alerts & Notifications -->
+        <div class="alert-header" style="flex: 1; max-width: calc(100% - 260px);">
+          <h3 class="section-title mb-1">Alerts & Notifications</h3>
+          <div class="alert-row">
+          </div>
+        </div>
+      </div>
+      
+      <div class="dashboard">
+        <!-- COLONNE GAUCHE 66% -->
+        <div class="col-66">
+          <div class="kpi-section">
+            <div class="section-title" style="font-size: 1.5rem; font-weight: 700; font-family: 'Inter', sans-serif;">
+                KPIs
+            </div>
+              
+
+            <div class="kpi-grid" id="kpiContainer"></div>
+          </div>
+  
+            <!-- Benchmarking juste après KPIs -->
+            <div class="panel mt-3" style="max-width: 723px; margin: auto;">
+                <div class="section-title benchmarking-title" style="position: relative;">
+                Machine Benchmarking
+                <div class="info-icon" id="benchmarkInfoBtn" style="margin-left: 8px;">
+                    <i class="fas fa-info-circle"></i>
+                </div>
+                <div id="benchmarkInfoBubble" class="info-bubble" style="display: none; top: 30px; right: 0; width: 450px; padding: 1rem;">
+                    <strong>Benchmark Score – How it Works:</strong><br>
+                    The benchmark score summarizes a machine’s performance by combining three key indicators using weighted importance:<br><br>
+                    • <b>Downtime</b> – weight: <b>60%</b><br>
+                    • <b>MTBF (Mean Time Between Failures)</b> – weight: <b>30%</b><br>
+                    • <b>MDT (Mean Downtime per Event)</b> – weight: <b>10%</b><br><br>
+                    Lower downtime and MDT, and a higher MTBF, contribute positively to the score.<br>
+                    Each metric is normalized before being combined, allowing a fair comparison across all machines based on the past 6 months.
+                </div>
+                  
+                </div>
+            
+                <div id="benchmarkingContent"></div>
+            </div>
+  
+  
+        </div>
+  
+        <!-- COLONNE DROITE 33% -->
+        <div class="col-33">
+          <div class="panel">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <h5 class="mb-0" style="font-size: 1.5rem; font-weight: 700; font-family: 'Inter', sans-serif;">
+                  Machine Status
+                </h5>
+                <button onclick="loadMachineStatuses()" class="btn btn-sm btn-outline-secondary" title="Reload Status">
+                  <i class="fas fa-sync-alt"></i>
+                </button>
+              </div>
+              
+            <div id="machineStatusList">
+              <p class="text-muted">Loading...</p>
+            </div>
+          </div>
+  
+          <div class="panel">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <h5 class="mb-0" style="font-size: 1.5rem; font-weight: 700; font-family: 'Inter', sans-serif; line-height: 1.3;">
+                  Contributors to<br>Maintenance Downtime
+                </h5>
+                  
+                <div class="btn-group btn-group-sm">
+                  <button class="btn btn-outline-primary" onclick="loadDowntimeContributors('1m')">1M</button>
+                  <button class="btn btn-outline-primary" onclick="loadDowntimeContributors('6m')">6M</button>
+                  <button class="btn btn-outline-primary" onclick="loadDowntimeContributors('12m')">1Y</button>
+                </div>
+              </div>
+                                      
+            <canvas id="downtimeChart" height="300"></canvas>
+            
+          </div>
+          <div style="text-align: center; margin-top: 50px;">
+            <img src="/images/paretops.svg" alt="ParetOPS Logo" style="width: 400px; opacity: 0.85;" />
+          </div>
+          
+        </div>
+      </div>
+    </div>
+
+    <div class="overlay" id="overlay" style="display: none;">
+        <div class="overlay-content">
+          <button class="btn btn-danger float-end" onclick="closeOverlay()">Close</button>
+          <h4 id="overlayTitle" class="mb-3">KPI</h4>
+          <canvas id="expandedChart"></canvas>
+      
+          <div class="mt-3">
+            <label for="thresholdInput">Threshold:</label>
+            <input type="number" id="thresholdInput" class="form-control" style="width: 100px; display: inline-block;" />
+            <div class="form-check form-check-inline ms-4">
+              <input class="form-check-input" type="radio" name="goal" id="maximize" value="maximize" checked />
+              <label class="form-check-label" for="maximize">Maximize</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="goal" id="minimize" value="minimize" />
+              <label class="form-check-label" for="minimize">Minimize</label>
+            </div>
+          </div>
+      
+          <div class="mt-3">
+            <label class="d-block mb-2"><strong>Filter by Machine:</strong></label>
+            <div class="mt-3">
+              <label><strong>Filter by Machines:</strong></label><br>
+              <div id="machineFilterContainer"></div>
+            </div>
+
+      
+          <div class="mt-3">
+            <button class="btn btn-primary btn-sm" onclick="setTimeframe(90)">Past 3 months</button>
+            <button class="btn btn-outline-primary btn-sm" onclick="setTimeframe(365)">Past year</button>
+          </div>
+        </div>
+    </div>
+      
+
+    <script src="/kpi_maintenance.js"></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', startKpiApp);
+    </script>
+
+
+<div class="overlay" id="logOverlay" style="display: none;">
+    <div class="overlay-content">
+      <button class="btn btn-danger float-end" onclick="closeLogOverlay()">Close</button>
+      <h4 id="logOverlayTitle" class="mb-3">Maintenance Logs</h4>
+      <div id="logContent">Loading...</div>
+    </div>
+</div>
+
+
+
+<script src="/js/utils.js"></script>
+</body>
+  
+</html>

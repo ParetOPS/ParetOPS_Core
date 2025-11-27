@@ -1,0 +1,775 @@
+<!--
+  pareto.html - CONFIDENTIAL - PROPERTY OF PARETOPS
+
+  For feedback or technical assistance, contact support@paretops.com
+
+  DESCRIPTION:
+  This HTML file displays the full Pareto analysis interface for reported production issues
+  in the ParetOPS platform. It provides a tabular summary, dynamic filtering, and an interactive
+  chart view (Pareto curve) to visualize issue frequency and distribution.
+
+  PURPOSE:
+  - Analyze root causes of downtime and production disruptions across all ply cutters.
+  - Filter issues by machine, date range, and type to identify top contributors.
+  - Export tabular data to Excel or download the Pareto chart as an image.
+
+  FEATURES:
+  - Responsive table of reported issues with live filtering.
+  - Overlay with dynamic Pareto chart (bar + cumulative % line).
+  - Export tools for Excel (XLSX) and image (PNG with transparent watermark).
+  - Optional filters: date range, ply cutter, issue type.
+  - Uses Chart.js for rendering and XLSX.js for data export.
+
+  DEPLOYMENT:
+  - Served from `/public/pareto.html` via the Leader dashboard.
+  - Requires backend API: `/api/get-pareto-data`.
+  - Chart export includes branded overlay image (ParetOPS logo).
+
+  DEPENDENCIES:
+  - jQuery for DOM manipulation and AJAX
+  - Chart.js for charting
+  - jsPDF and XLSX libraries for export
+  - Font Awesome for icons
+  - `/js/utils.js` for formatting and date conversion
+
+  AUTHOR:
+  Paulin Colin BANCKAERT — Pareto Analysis Interface v3.0.0
+
+  VERSIONING:
+  - Version-controlled under Git. Changes to the API, table structure, or export behavior must be tagged.
+-->
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Pareto Analysis</title>
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+        <script src="https://code.jquery.com/jquery-3.6.0.min.js">document.getElementById('exportTable').addEventListener('click', function() {
+            let table = document.querySelector('table');
+            let wb = XLSX.utils.book_new();
+            let ws = XLSX.utils.table_to_sheet(table);
+            XLSX.utils.book_append_sheet(wb, ws, "Pareto Data");
+            XLSX.writeFile(wb, "pareto_table.xlsx");
+        });</script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.16.9/xlsx.full.min.js"></script>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+        <link rel="icon" type="image/png" href="/favicon.png">
+
+
+
+
+    <style>
+        /* ✅ Home Button Styling */
+           /* ✅ Home Button - Same Position but New Design */
+            .home-button {
+                position: absolute; /* Keep it in the same spot */
+                top: 15px; /* Adjusted to match previous placement */
+                left: 15px;
+                background-color: #343a40; /* Dark gray like in production.html */
+                color: white;
+                padding: 10px 15px;
+                border-radius: 6px;
+                font-size: 1.1rem;
+                text-decoration: none;
+                transition: background-color 0.2s ease-in-out;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+            }
+
+            .home-button i {
+                font-size: 1.2rem; /* Ensures the house icon is visible */
+            }
+
+            .home-button:hover {
+                background-color: #1d2124; /* Slightly darker on hover */
+            }
+
+
+            #paretoOverlay {
+                display: none; /* Ensures the overlay is hidden on load */
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.8);
+                z-index: 1000;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+            }
+
+            .overlay-content {
+                background: white;
+                padding: 20px;
+                border-radius: 10px;
+                text-align: center;
+                width: 80%;
+                max-width: 800px;
+                position: relative;
+            }
+
+            .pareto-img {
+                position: absolute;
+                top: 35%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                width: 150px; /* Adjust as needed */
+                height: auto;
+                opacity: 0.3; /* Make it slightly transparent */
+                z-index: 10;
+                pointer-events: none; /* Ensures clicks go through */
+            }
+
+    </style>
+</head> 
+<body>
+    <div class="container mt-4">
+        <h2 class="text-center">Pareto Analysis - Reported Issues</h2>
+        
+        <!-- Home Button -->
+        <!-- Buttons container -->
+        <div class="text-left mb-3 d-flex" style="gap: 15px; align-items: center;">
+            <a href="/" class="btn btn-primary home-button">
+                <i class="fas fa-home"></i> Home
+            </a>            
+            <button id="showParetoChart" class="btn btn-secondary">Pareto</button>
+            <button id="exportTable" class="btn btn-success">Export Table to Excel</button>
+        </div>
+
+        <!-- Filters -->
+        <div class="card mb-3">
+        <div class="card-body p-2">
+            <div class="form-row align-items-end">
+            <!-- Date From -->
+            <div class="col-auto">
+                <label for="startDate" class="mb-0">From</label>
+                <input type="date" id="startDate" class="form-control form-control-sm">
+            </div>
+            <!-- Date To -->
+            <div class="col-auto">
+                <label for="endDate" class="mb-0">To</label>
+                <input type="date" id="endDate" class="form-control form-control-sm">
+            </div>
+            <!-- Ply Cutter -->
+            <div class="col-auto">
+                <label for="pcFilter" class="mb-0">Ply Cutter</label>
+                <select id="pcFilter" class="form-control form-control-sm">
+                <option value="ALL">All</option>
+                <option value="PC1">PC1</option>
+                <option value="PC2">PC2</option>
+                <option value="PC3">PC3</option>
+                <option value="PC4">PC4</option>
+                <option value="PC5">PC5</option>
+                <option value="PC6">PC6</option>
+                <option value="PC7">PC7</option>
+                <option value="PC8">PC8</option>
+                <option value="PC9">PC9</option>
+                <option value="PC10">PC10</option>
+                </select>
+            </div>
+            <!-- Shift -->
+            <div class="col-auto">
+                <label for="shiftFilter" class="mb-0">Shift</label>
+                <select id="shiftFilter" class="form-control form-control-sm">
+                <option value="ALL">All</option>
+                </select>
+            </div>
+            <!-- Issue type -->
+            <div class="col-auto">
+                <label for="issueTypeFilter" class="mb-0">Issue type</label>
+                <select id="issueTypeFilter" class="form-control form-control-sm">
+                <option value="ALL">All</option>
+                </select>
+            </div>
+            </div>
+        </div>
+        </div>
+
+        
+        <!-- Issues Table -->
+        <table class="table table-bordered">
+            <thead class="thead-dark">
+                <tr>
+                    <th>Date</th>
+                    <th>PC</th>
+                    <th>Shift</th>
+                    <th>Type of Issue</th>
+                    <th>Comment</th>
+                    <th>Downtime (min)</th>
+                </tr>
+            </thead>
+
+
+            <tbody id="paretoTableBody">
+                <!-- Data will be inserted here dynamically -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+       $(document).ready(function() {
+/**
+ * Charge les reported_issues pour la plage de dates et le plyCutter sélectionnés,
+ * peuple dynamiquement les listes Shift et Issue type d'après les données visibles,
+ * puis applique les filtres (Shift + Issue type) et affiche la table.
+ *
+ * Hypothèses:
+ * - #pcFilter, #startDate, #endDate, #shiftFilter, #issueTypeFilter existent dans le DOM.
+ * - Le backend /api/get-pareto-data accepte startDate/endDate (YYYY-MM-DD) et filtre en local Austin.
+ * - Ne PAS filtrer au serveur par shift/issueType ici pour pouvoir bâtir les listes déroulantes.
+ */
+            function fetchReportedIssues() {
+            // 1) Lire la sélection utilisateur
+            const plyCutter = $('#pcFilter').val()    || 'ALL';
+            const startDate = $('#startDate').val()   || 'ALL';
+            const endDate   = $('#endDate').val()     || 'ALL';
+
+            // Conserver la sélection courante (si l'utilisateur a déjà choisi quelque chose)
+            let selectedShift     = $('#shiftFilter').val()      || 'ALL';
+            let selectedIssueType = $('#issueTypeFilter').val()  || 'ALL';
+
+            // 2) Construire l’URL pour l’API
+            //    → on filtre au serveur par date + plyCutter uniquement
+            //    → shift/issueType à ALL pour récupérer le superset et construire les listes
+            const params = new URLSearchParams({
+                plyCutter,
+                day: 'ALL',
+                startDate,
+                endDate,
+                shift: 'ALL',
+                issueType: 'ALL'
+            });
+
+            const url = `/api/get-pareto-data?${params.toString()}`;
+            console.log("[fetchReportedIssues] GET:", url);
+
+            $.get(url)
+                .done(function(response) {
+                if (!response || !Array.isArray(response.paretoData)) {
+                    console.error("[fetchReportedIssues] Invalid response format");
+                    return;
+                }
+
+                const allData = response.paretoData;
+
+                // 3) Peupler dynamiquement SHIFT d'après toutes les lignes reçues
+                const uniqueShifts = Array.from(new Set(
+                    allData
+                    .map(r => r.shift)
+                    .filter(s => s !== null && s !== undefined && s !== '')
+                    .map(String)
+                )).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+                const $shift = $('#shiftFilter');
+                const prevShift = selectedShift;
+                $shift.empty().append('<option value="ALL">All</option>');
+                uniqueShifts.forEach(s => $shift.append(`<option value="${s}">${s}</option>`));
+
+                // Restaurer la sélection si elle est toujours valide, sinon repasser à ALL
+                if (prevShift && (prevShift === 'ALL' || uniqueShifts.includes(String(prevShift)))) {
+                    $shift.val(prevShift);
+                    selectedShift = String(prevShift);
+                } else {
+                    $shift.val('ALL');
+                    selectedShift = 'ALL';
+                }
+
+                // 4) Appliquer le filtre SHIFT (prépare la liste d'issue types disponibles)
+                const afterShift = allData.filter(row => {
+                    if (selectedShift === 'ALL') return true;
+                    return String(row.shift) === String(selectedShift);
+                });
+
+                // 5) Peupler dynamiquement ISSUE TYPE à partir du dataset filtré par shift
+                const uniqueIssueTypes = Array.from(new Set(
+                    afterShift
+                    .map(r => r.issue_type)
+                    .filter(t => t !== null && t !== undefined && t !== '')
+                )).sort((a, b) => a.localeCompare(b));
+
+                const $issueType = $('#issueTypeFilter');
+                const prevIssueType = selectedIssueType;
+                $issueType.empty().append('<option value="ALL">All</option>');
+                uniqueIssueTypes.forEach(t => $issueType.append(`<option value="${t}">${t}</option>`));
+
+                // Restaurer la sélection si elle est toujours valide, sinon repasser à ALL
+                if (prevIssueType && (prevIssueType === 'ALL' || uniqueIssueTypes.includes(prevIssueType))) {
+                    $issueType.val(prevIssueType);
+                    selectedIssueType = prevIssueType;
+                } else {
+                    $issueType.val('ALL');
+                    selectedIssueType = 'ALL';
+                }
+
+                // 6) Appliquer le filtre ISSUE TYPE pour obtenir le dataset final
+                const afterIssueType = afterShift.filter(row => {
+                    if (selectedIssueType === 'ALL') return true;
+                    return row.issue_type === selectedIssueType;
+                });
+
+                // 7) (Optionnel) Refiltrer par dates côté client (normalement inutile si le serveur filtre déjà)
+                //    On garde cet étage pour robustesse : on compare des chaînes Y-M-D homogènes.
+                const fromYMD = (startDate && startDate !== 'ALL') ? startDate : null;
+                const toYMD   = (endDate   && endDate   !== 'ALL') ? endDate   : null;
+
+                const filteredIssues = afterIssueType.filter(issue => {
+                    // issue.date est un timestamp ISO/UTC renvoyé par l'API → on le convertit en YYYY-MM-DD local Austin
+                    const issueDateYMD = getAustinDateStringFromISO(issue.date);
+                    return (!fromYMD || issueDateYMD >= fromYMD) && (!toYMD || issueDateYMD <= toYMD);
+                });
+
+                // 8) Afficher la table
+                populateTable(filteredIssues);
+                })
+                .fail(function(err) {
+                console.error("[fetchReportedIssues] Error:", err);
+                });
+            }
+
+
+
+            //    Now `populateTable` is **outside** of `fetchReportedIssues()`
+            function populateTable(issues) {
+                console.log("Populating table with:", issues); // Debugging log
+                let tableBody = $('#paretoTableBody');
+                tableBody.empty();
+
+                if (issues.length === 0) {
+                    tableBody.append("<tr><td colspan='6' class='text-center'>No reported issues found</td></tr>");
+                    return;
+                }
+
+                issues.forEach(issue => {
+                    let formattedDate = formatDate(issue.date); // Format date for better readability
+
+                    tableBody.append(`
+                        <tr>
+                            <td>${formattedDate}</td>
+                            <td>${issue.plyCutter}</td>
+                            <td>${issue.shift ?? 'N/A'}</td>
+                            <td>${issue.issue_type}</td>
+                            <td>${issue.comment || 'N/A'}</td>
+                            <td>${issue.downtime || '0'}</td>
+                        </tr>
+                    `);
+
+                });
+
+                console.log("Table updated with reported issues!");
+            }
+
+            // Function to format ISO date into `YYYY-MM-DD HH:MM:SS`
+            function formatDate(isoString) {
+                let date = new Date(isoString);
+                let year = date.getFullYear();
+                let month = String(date.getMonth() + 1).padStart(2, '0');
+                let day = String(date.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            }
+
+
+
+            // Populate Dropdown Filters
+            function populateFilters(issues) {
+                let issueTypeSet = new Set();
+
+                issues.forEach(issue => {
+                    if (issue.issue_type) {
+                        issueTypeSet.add(issue.issue_type);
+                    }
+                });
+
+                let issueTypeFilter = $('#issueTypeFilter');
+                issueTypeFilter.empty();
+                issueTypeFilter.append(`<option value="">All</option>`); // Always include "All"
+
+                issueTypeSet.forEach(type => {
+                    issueTypeFilter.append(`<option value="${type}">${type}</option>`);
+                });
+            }
+
+
+            // Call fetchReportedIssues() on page load
+            console.log("Document ready! Calling fetchReportedIssues...");
+            fetchReportedIssues();
+
+            // Filter Functionality
+            $('#startDate, #endDate, #pcFilter, #shiftFilter, #issueTypeFilter').on('change', function() {
+                fetchReportedIssues();
+            });
+
+        });
+
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        function getSelectedFilters() {
+        const pc   = $('#pcFilter').val() || 'ALL';
+        const sh   = $('#shiftFilter').val() || 'ALL';
+        const type = $('#issueTypeFilter').val() || 'ALL';
+        const from = $('#startDate').val() || 'ALL';
+        const to   = $('#endDate').val() || 'ALL';
+        return { pc, sh, type, from, to };
+        }
+
+        function buildChartTitle() {
+        const { pc, sh, type, from, to } = getSelectedFilters();
+        const parts = [];
+        if (pc   && pc   !== 'ALL') parts.push(`PC: ${pc}`);
+        if (sh   && sh   !== 'ALL') parts.push(`Shift: ${sh}`);
+        if (type && type !== 'ALL') parts.push(`Type: ${type}`);
+        if ((from && from !== 'ALL') || (to && to !== 'ALL')) {
+            parts.push(`Dates: ${from !== 'ALL' ? from : '…'}→${to !== 'ALL' ? to : 'Today'}`);
+        }
+        return parts.length ? `${parts.join(' | ')}` : 'All data';
+        }
+
+        function sanitizeForFilename(s) {
+        return s
+            .replaceAll(/[^\w\s.-]/g, '_')
+            .replaceAll(/\s+/g, '_')
+            .slice(0, 120);
+        }
+    </script>
+
+    <script>
+        // Wait for the full HTML document to be loaded before executing chart setup logic
+        document.addEventListener("DOMContentLoaded", function () {
+            let paretoOverlay = document.getElementById('paretoOverlay');
+            
+            // Ensure overlay starts hidden
+            paretoOverlay.style.display = 'none';
+
+            // Show overlay when "Pareto" button is clicked
+            document.getElementById('showParetoChart').addEventListener('click', function() {
+                console.log("Pareto button clicked"); // Debugging log
+                generateParetoChart();
+                paretoOverlay.style.display = 'flex';
+            });
+
+            // Hide overlay when "Close" button is clicked
+            document.getElementById('closePareto').addEventListener('click', function() {
+                console.log("Closing Pareto overlay"); // Debugging log
+                paretoOverlay.style.display = 'none';
+            });
+
+            // Hide overlay when pressing ESC key
+            document.addEventListener('keydown', function(event) {
+                if (event.key === "Escape") {
+                    console.log("ESC pressed - closing overlay"); // Debugging log
+                    paretoOverlay.style.display = 'none';
+                }
+            });
+        });
+
+        let globalSortedIssues = [];
+
+        // Generate the Pareto chart based on filtered issue types in the current table
+        function generateParetoChart() {
+            console.log("Generating Pareto Chart using filtered table data");
+
+            let issueCounts = {};
+            let totalIssues = 0;
+
+            $('#paretoTableBody tr').each(function () {
+                let issueType = $(this).find("td:nth-child(4)").text().trim();
+                if (!issueType || issueType === "N/A") return;
+                issueCounts[issueType] = (issueCounts[issueType] || 0) + 1;
+                totalIssues++;
+            });
+
+            if (totalIssues === 0) {
+                alert("No issues found for Pareto analysis.");
+                return;
+            }
+
+            let sortedIssues = Object.entries(issueCounts).sort((a, b) => b[1] - a[1]);
+            let labels = sortedIssues.map(item => item[0]);
+            let values = sortedIssues.map(item => item[1]);
+
+            let cumulativePercentages = [];
+            let cumulativeSum = 0;
+
+            values.forEach(value => {
+                cumulativeSum += value;
+                cumulativePercentages.push((cumulativeSum / totalIssues) * 100);
+            });
+
+            let ctx = document.getElementById("paretoChart").getContext("2d");
+
+            if (window.paretoChartInstance) {
+                window.paretoChartInstance.destroy();
+            }
+
+            window.paretoChartInstance = new Chart(ctx, {
+                type: "bar",
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: "Issue Count",
+                            data: values,
+                            backgroundColor: "rgba(75, 192, 192, 0.6)",
+                            borderColor: "rgba(75, 192, 192, 1)",
+                            borderWidth: 1,
+                            yAxisID: 'y',
+                        },
+                        {
+                            label: "Cumulative %",
+                            data: cumulativePercentages,
+                            type: "line",
+                            borderColor: "red",
+                            backgroundColor: "rgba(255, 0, 0, 0.3)",
+                            borderWidth: 2,
+                            fill: false,
+                            yAxisID: 'y1',
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                    title: {
+                        display: true,
+                        text: buildChartTitle(),
+                        padding: { top: 8, bottom: 12 },
+                        font: { size: 16, weight: 'bold' }
+                    },
+                    legend: { position: 'top' }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                display: false, // 🔹 Removes vertical grid lines
+                            },
+                            title: {
+                                display: true,
+                                text: "Issue Types"
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                drawBorder: false, // Keeps axis border but no grid
+                                drawOnChartArea: false, // 🔹 Removes horizontal grid lines
+                            },
+                            title: {
+                                display: true,
+                                text: "Issue Count"
+                            }
+                        },
+                        y1: {
+                            beginAtZero: true,
+                            position: "right",
+                            grid: {
+                                drawBorder: false, // Keeps axis border
+                                drawOnChartArea: false, // 🔹 Removes grid lines from the second axis
+                            },
+                            title: {
+                                display: true,
+                                text: "Cumulative %"
+                            },
+                            ticks: {
+                                callback: function (value) {
+                                    return value + "%";
+                                },
+                                max: 100
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Draw the Pareto chart using a predefined list of issues (used in fallback or post-processing)
+        function drawParetoChart(issues) {
+            // Count occurrences of each issue type
+            let issueCounts = {};
+            issues.forEach(issue => {
+                issueCounts[issue.issue_type] = (issueCounts[issue.issue_type] || 0) + 1;
+            });
+
+            // Convert to an array and sort by count (descending)
+            let sortedIssues = Object.entries(issueCounts)
+                .sort((a, b) => b[1] - a[1]); // Sort DESC
+
+            let labels = sortedIssues.map(item => item[0]); // Issue types
+            let values = sortedIssues.map(item => item[1]); // Counts
+
+            // Calculate cumulative percentages
+            let total = values.reduce((sum, val) => sum + val, 0);
+            let cumulativePercentages = [];
+            let cumulativeSum = 0;
+
+            values.forEach(value => {
+                cumulativeSum += value;
+                cumulativePercentages.push((cumulativeSum / total) * 100);
+            });
+
+            let ctx = document.getElementById("paretoChart").getContext("2d");
+
+            // Destroy existing chart to avoid overlay issues
+            if (window.paretoChartInstance) {
+                window.paretoChartInstance.destroy();
+            }
+
+            // Create new Pareto chart
+            window.paretoChartInstance = new Chart(ctx, {
+                type: "bar",
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: "Issue Count",
+                            data: values,
+                            backgroundColor: "rgba(75, 192, 192, 0.6)",
+                            borderColor: "rgba(75, 192, 192, 1)",
+                            borderWidth: 1,
+                            yAxisID: 'y',
+                        },
+                        {
+                            label: "Cumulative %",
+                            data: cumulativePercentages,
+                            type: "line",
+                            borderColor: "red",
+                            backgroundColor: "rgba(255, 0, 0, 0.3)",
+                            borderWidth: 2,
+                            fill: false,
+                            yAxisID: 'y1',
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: "Issue Count"
+                            }
+                        },
+                        y1: {
+                            beginAtZero: true,
+                            position: "right",
+                            title: {
+                                display: true,
+                                text: "Cumulative %"
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return value + "%";
+                                },
+                                max: 100
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Close the overlay if the Escape key is pressed by the user
+        document.addEventListener('keydown', function(event) {
+            if (event.key === "Escape") {
+                document.getElementById('paretoOverlay').style.display = 'none';
+            }
+        });
+
+        // Export the issue table to an Excel file when the "Export Table" button is clicked
+        document.getElementById('exportTable').addEventListener('click', function() {
+            let table = document.querySelector('table'); // Sélectionne le tableau de la page
+            let wb = XLSX.utils.book_new(); // Crée un nouveau fichier Excel
+            let ws = XLSX.utils.table_to_sheet(table); // Convertit le tableau HTML en feuille Excel
+            XLSX.utils.book_append_sheet(wb, ws, "Pareto Data"); // Ajoute la feuille au fichier Excel
+            XLSX.writeFile(wb, "pareto_table.xlsx"); // Télécharge le fichier Excel sous ce nom
+        });
+
+        // Re-attach logic after DOM is fully loaded (used for delayed event binding)
+        document.addEventListener("DOMContentLoaded", function () {
+            let exportButton = document.getElementById('exportPareto');
+
+            if (exportButton) {
+                exportButton.addEventListener('click', function () {
+                    let paretoCanvas = document.getElementById('paretoChart');
+
+                    if (!paretoCanvas) {
+                        console.error("Pareto chart canvas not found!");
+                        alert("No Pareto chart found to export.");
+                        return;
+                    }
+
+                    let tempCanvas = document.createElement("canvas");
+                    tempCanvas.width = paretoCanvas.width;
+                    tempCanvas.height = paretoCanvas.height;
+                    let tempCtx = tempCanvas.getContext("2d");
+
+                    // 🔹 Fill background with white
+                    tempCtx.fillStyle = "white";
+                    tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+                    // 🔹 Draw the Pareto chart on top
+                    tempCtx.drawImage(paretoCanvas, 0, 0);
+
+                    // 🔹 Load and draw the Pareto logo with preserved proportions
+                    let logo = new Image();
+                    logo.src = "images/paretops.svg"; // Ensure the correct path
+
+                    logo.onload = function () {
+                        let logoWidth = 150; // Match the CSS width
+                        let aspectRatio = logo.naturalWidth / logo.naturalHeight; // Preserve aspect ratio
+                        let logoHeight = logoWidth / aspectRatio; // Auto-calculate height
+
+                        let centerX = tempCanvas.width * 0.50; // `left: 50%`
+                        let centerY = tempCanvas.height * 0.3; // `top: 35%`
+
+                        tempCtx.globalAlpha = 0.3; // 🔹 Matches `.pareto-img` opacity
+                        tempCtx.drawImage(logo, centerX - logoWidth / 2, centerY - logoHeight / 2, logoWidth, logoHeight);
+                        tempCtx.globalAlpha = 1.0; // Reset opacity
+
+                        // Convert to image and trigger download after logo is drawn
+                        const image = tempCanvas.toDataURL('image/png');
+                        const downloadLink = document.createElement('a');
+                        downloadLink.href = image;
+
+                        // ↓↓↓ NOUVEAU : nom de fichier basé sur les filtres
+                        const niceTitle = buildChartTitle().replace(/^Pareto\s+—\s+/i, 'Pareto_');
+                        const fileName = sanitizeForFilename(`${niceTitle}.png`);
+                        downloadLink.download = fileName;
+                        // ↑↑↑
+
+                        document.body.appendChild(downloadLink);
+                        downloadLink.click();
+                        document.body.removeChild(downloadLink);
+
+                    };
+                });
+            } else {
+                console.error("Export button not found at the time of script execution.");
+            }
+        });
+
+
+        
+
+    </script>
+
+    <!-- Pareto Chart Overlay -->
+    <div id="paretoOverlay" class="overlay">
+        <div class="overlay-content">
+            <h3>Pareto Chart</h3>
+            <canvas id="paretoChart"></canvas>
+            <img id="paretoImage" src="/images/paretops.svg" alt="Pareto Overlay" class="pareto-img">   
+            <button id="exportPareto" class="btn btn-success mt-3">Export</button>
+            <button id="closePareto" class="btn btn-danger mt-3">Close</button>
+        </div>
+    </div>
+    <script src="/js/utils.js"></script>
+</body>
+</html>

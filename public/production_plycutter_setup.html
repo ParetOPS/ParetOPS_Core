@@ -1,0 +1,596 @@
+<!--
+  production_plycutter_setup.html - CONFIDENTIAL - PROPERTY OF PARETOPS
+
+  For support, issue reporting, or improvements, contact support@paretops.com
+
+  DESCRIPTION:
+  This HTML file provides the interface for configuring daily production objectives per shift and per ply cutter.
+  It allows team leaders to assign programs, flag training or floater support, and define output targets for each machine.
+
+  PURPOSE:
+  - Set up daily production targets across 3 shifts for all ply cutters.
+  - Account for training and floater effects on productivity via modifiers.
+  - Submit and persist shift configurations with real-time WebSocket updates.
+
+  FEATURES:
+  - 3 auto-generated shift tables (Shift 1, 2, 3) with row-level controls.
+  - Dynamic program selection with pre-defined objective values.
+  - Real-time adjustments via +/− buttons.
+  - Green visual feedback when objectives are successfully submitted.
+  - Automatic loading of saved values and machine status from the backend.
+  - Machines marked as "DOWN" are locked for input and shown in red.
+
+  DEPLOYMENT:
+  - Served from `/public/production_plycutter_setup.html`
+  - Backend endpoints used:
+    • `/api/save-data`
+    • `/api/get-submitted-data`
+    • `/api/get-all-status`
+  - Socket.IO required for WebSocket broadcasting:
+    • `machineDataUpdated`
+    • `refreshRealTimeStatus`
+    • `updateMachineStatus`
+
+  DEPENDENCIES:
+  - Bootstrap 4.5 and Font Awesome
+  - Custom helper scripts in `/js/utils.js`
+  - Socket.IO
+
+  AUTHOR:
+  Paulin Colin BANCKAERT — Production Setup Interface v3.0.0
+
+  VERSIONING:
+  - Version-controlled in Git. Update the logic or structure if new columns, programs, or statuses are introduced.
+-->
+
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+  <link rel="icon" type="image/png" href="/favicon.png">
+
+  <script src="/socket.io/socket.io.js"></script>
+  <title>Production Set Up</title>
+  <style>
+    /* General styles */
+    body {
+      margin: 10px;
+      font-size: 11px;
+      background-color: #f4f6f9;
+    }
+
+    h2, h4 {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+
+    .table-container {
+      display: flex;
+      justify-content: space-around;
+      margin-top: 10px;
+      flex-wrap: wrap;
+      gap: 15px;
+    }
+
+    table {
+      width: 30%;
+      border-collapse: separate;
+      border-spacing: 0;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+      background: white;
+    }
+
+    th {
+      background-color: #007bff;
+      color: white;
+      font-size: 15px;
+      padding: 7px;
+      border-bottom: 3px solid #0056b3;
+    }
+
+    td {
+      border: 1px solid #ddd;
+      text-align: center;
+      padding: 5px;
+      padding-top: 1px;  /* Reduced top padding */
+      padding-bottom: 1px;  /* Reduced bottom padding */
+      font-size: 13px;
+    }
+
+    tr:hover {
+      background-color: #f1f1f1;
+    }
+
+    .btn {
+      margin-top: 5px;
+      font-size: 12px;
+    }
+
+    .btn-submit {
+      display: block;
+      margin: 15px auto;
+      font-size: 18px;
+      padding: 5px;
+    }
+
+    /* Ensure OBJ turns green on submit */
+    .green {
+      background-color: lightgreen;
+    }
+
+    .adjust-btn {
+      width: 30px;
+      height: 30px;
+      font-size: 18px;
+      text-align: center;
+      border-radius: 5px;
+      border: 1px solid black;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: auto;
+      background-color: #e9ecef;
+      transition: background-color 0.3s;
+    }
+
+    .adjust-btn:hover {
+      background-color: #d6d8db;
+    }
+
+    /*      Home Button Styling */
+    .home-button {
+        position: fixed;
+        top: 20px;
+        left: 20px;
+        background-color: #343a40;
+        color: white;
+        padding: 10px 12px;
+        border-radius: 6px;
+        font-size: 1.1rem;
+        text-decoration: none;
+        transition: background-color 0.2s ease-in-out;
+        box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    .home-button:hover {
+        background-color: #1d2124;
+    }
+
+    .down {
+        background-color: red !important;
+        color: white !important;
+    }
+
+    .down td {
+        font-weight: bold;
+    }
+
+    .down select, .down input, .down button {
+        pointer-events: none;  /* Disable inputs when machine is DOWN */
+        background-color: rgba(255, 0, 0, 0.3) !important;
+    }
+
+
+  </style>
+</head>
+<body>
+  <a href="/" class="home-button"><i class="fas fa-home"></i> Home</a>
+  <h2>Production Set Up</h2>
+  <div class="table-container"></div>
+
+
+  <script>
+    const socket = io();  // Ensure socket is properly initialized
+
+    // These will be filled from /api/config
+    let plyCutters = [];
+    let programs = [];
+    let productionSetup = {
+      programs: {},
+      traineeReductionFactor: 0.7
+    };
+
+    // Wrapper for fetch calls with built-in error handling
+    function fetchAPI(url, options = {}) {
+      return fetch(url, options)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`API Error: ${response.status} - ${response.statusText}`);
+          }
+          return response.json();
+        })
+        .catch(error => {
+          console.error(error);
+          alert("⚠️ An error occurred while processing the request. Please try again.");
+        });
+    }
+
+    // Creates a debounced version of a function to limit how often it's called
+    function debounce(func, delay) {
+      let timer;
+      return function (...args) {
+        clearTimeout(timer);
+        timer = setTimeout(() => func.apply(this, args), delay);
+      };
+    }
+
+    // ====== Load configuration from backend then init page ======
+    function loadConfigAndInit() {
+      fetch('/api/config')
+        .then(res => res.json())
+        .then(cfg => {
+          // Machines (M1..M10, etc.)
+          plyCutters = cfg.machines || [];
+
+          // Production setup (programs, trainee factor)
+          productionSetup = cfg.productionSetup || productionSetup;
+
+          // Build list of programs for dropdowns
+          const programDefinitions = productionSetup.programs || {};
+
+          // Always include an "empty" option
+          programs = [
+            { value: 'empty', label: 'empty', objective: 0 },
+            ...Object.entries(programDefinitions).map(([name, conf]) => ({
+              value: name,
+              label: name,
+              objective: conf.baseObjective || 0
+            }))
+          ];
+
+          // Now that config is loaded, build UI + load data
+          createShiftTables();
+          loadSubmittedData();
+          fetchMachineStatuses();
+
+          // Subscribe to live status updates
+          socket.on('updateMachineStatus', (machineStatuses) => {
+            console.log("🔴 Received machine status update:", machineStatuses);
+            applyMachineStatus(machineStatuses);
+          });
+        })
+        .catch(err => {
+          console.error('❌ Failed to load config', err);
+          alert('Unable to load configuration. Please check server or config file.');
+        });
+    }
+
+    // Dynamically builds HTML tables for Shift 1, 2, and 3 with headers and action buttons
+    function createShiftTables() {
+      const container = document.querySelector('.table-container');
+      container.innerHTML = ''; // Clear before populating
+
+      for (let shift = 1; shift <= 3; shift++) {
+        const tableDiv = document.createElement('div');
+        tableDiv.classList.add("shift-container");
+        tableDiv.innerHTML = `
+          <h4>SHIFT ${shift}</h4>
+          <table id="shift${shift}-table">
+            <thead>
+              <tr>
+                <th>Machine</th>
+                <th>Program</th>
+                <th>Trainees</th>
+                <th>Floater</th>
+                <th>Obj</th>
+                <th>Adjust</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+          <button class="btn btn-success btn-submit" onclick="submitShift(${shift})">Submit</button>
+        `;
+        container.appendChild(tableDiv);
+
+        // Populate each table with machine rows
+        populateTableRows(`shift${shift}-table`);
+      }
+    }
+
+    // Populates a table with rows for each machine and sets up event listeners
+    function populateTableRows(tableId) {
+      const table = document.getElementById(tableId);
+      if (!table) {
+        console.error(`Table ${tableId} not found!`);
+        return;
+      }
+
+      const tbody = table.querySelector('tbody');
+      tbody.innerHTML = ''; // Ensure fresh rows each time
+
+      plyCutters.forEach(plyCutter => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${plyCutter}</td>
+          <td>
+            <select class="program-select">
+              ${programs
+                .map(p => `<option value="${p.value}" data-obj="${p.objective}" ${p.value === 'empty' ? 'selected' : ''}>${p.label}</option>`)
+                .join('')}
+            </select>
+          </td>
+          <td><input type="checkbox" class="trainee-checkbox"></td>
+          <td><input type="checkbox" class="floater-checkbox"></td>
+          <td class="objective">0</td>
+          <td>
+            <button class="adjust-btn" data-change="1">+</button>
+            <button class="adjust-btn" data-change="-1">-</button>
+          </td>
+        `;
+        tbody.appendChild(row);
+
+        const programSelect = row.querySelector('.program-select');
+        const traineeCheckbox = row.querySelector('.trainee-checkbox');
+        const floaterCheckbox = row.querySelector('.floater-checkbox');
+        const objectiveCell = row.querySelector('.objective');
+        const adjustButtons = row.querySelectorAll('.adjust-btn');
+
+        // Compute objective based on config + trainee + floater
+        function updateObjective(row) {
+          const programSelect = row.querySelector('.program-select');
+          const traineeCheckbox = row.querySelector('.trainee-checkbox');
+          const floaterCheckbox = row.querySelector('.floater-checkbox');
+          const objectiveCell = row.querySelector('.objective');
+
+          const programName = programSelect.value;
+          const programConfig = (productionSetup.programs || {})[programName] || null;
+
+          let objValue = 0;
+
+          // If "empty" or unknown program: objective = 0
+          if (!programConfig || programName === 'empty') {
+            objValue = 0;
+          } else {
+            // Base objective from config
+            objValue = parseInt(programConfig.baseObjective || 0, 10);
+          }
+
+          // Apply trainee reduction
+          if (traineeCheckbox.checked && objValue > 0) {
+            const factor = productionSetup.traineeReductionFactor || 1;
+            objValue = Math.floor(objValue * factor);
+          }
+
+          // Apply floater rule if any
+          if (floaterCheckbox.checked && objValue > 0 && programConfig) {
+            if (typeof programConfig.floaterObjective === 'number') {
+              // Absolute override
+              objValue = programConfig.floaterObjective;
+            } else if (typeof programConfig.floaterMultiplier === 'number') {
+              // Relative multiplier
+              objValue = Math.ceil(objValue * programConfig.floaterMultiplier);
+            }
+          }
+
+          // Update the objective cell
+          objectiveCell.textContent = objValue;
+
+          // Remove green highlight when a change occurs
+          objectiveCell.classList.remove('green');
+        }
+
+        // Event listeners
+        programSelect.addEventListener("change", () => {
+          updateObjective(row);
+          row.dataset.modified = "true";
+        });
+        traineeCheckbox.addEventListener("change", () => {
+          updateObjective(row);
+          row.dataset.modified = "true";
+        });
+        floaterCheckbox.addEventListener("change", () => {
+          updateObjective(row);
+          row.dataset.modified = "true";
+        });
+
+        // Attach event listeners for + and - buttons
+        adjustButtons.forEach(button => {
+          button.addEventListener("click", debounce(() => {
+            const change = parseInt(button.getAttribute("data-change")); // +1 or -1
+            const objectiveCell = row.querySelector('.objective');
+            let currentValue = parseInt(objectiveCell.textContent) || 0;
+
+            // Ensure the new value remains non-negative
+            const newValue = Math.max(0, currentValue + change);
+            objectiveCell.textContent = newValue;
+
+            // Remove green highlight if changed
+            objectiveCell.classList.remove('green');
+
+            row.dataset.modified = "true";
+          }, 300));
+        });
+      });
+    }
+
+    // Gathers all modified rows for a given shift into an array of submission-ready objects
+    function collectShiftData(shift) {
+      const modifiedRows = Array.from(
+        document.querySelectorAll(`#shift${shift}-table tbody tr`)
+      )
+        .filter(row => row.dataset.modified === "true")
+        .map(row => ({
+          plyCutter: row.cells[0].textContent,
+          program: row.querySelector('.program-select').value,
+          trainee: row.querySelector('.trainee-checkbox').checked,
+          floater: row.querySelector('.floater-checkbox').checked,
+          output_obj: parseInt(row.querySelector('.objective').textContent) || 0,
+          submitted: true
+        }));
+
+      console.log(`🔍 Shift ${shift} - Modified rows:`, modifiedRows);
+      return modifiedRows;
+    }
+
+    // Sends shift data to the server and broadcasts real-time updates via WebSocket
+    function submitShift(shift) {
+      const data = collectShiftData(shift);
+      const day = getAustinDateString();
+
+      if (data.length === 0) {
+        console.warn(`⚠️ No data to submit for shift ${shift}. Skipping API call.`);
+        alert(`No data to submit for Shift ${shift}. Please make changes before submitting.`);
+        return;
+      }
+
+      fetchAPI('/api/save-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shift, day, data }),
+      }).then(result => {
+        if (result) {
+          console.log('✅ Shift data saved:', result);
+
+          // Fetch updated data before emitting WebSocket events
+          fetch(`/api/get-submitted-data?day=${day}&shift=${shift}`)
+            .then(response => response.json())
+            .then(updatedData => {
+              console.log(`🔴 Emitting WebSocket updates for shift ${shift}...`, updatedData);
+              updatedData.forEach(d => {
+                socket.emit('machineDataUpdated', {
+                  plyCutter: d.plyCutter,
+                  shift: shift,
+                  day: day,
+                  program: d.program,
+                  obj_value: d.obj_value
+                });
+              });
+              console.log("📡 WebSocket updates sent:", updatedData);
+            })
+            .catch(error => console.error("❌ Error fetching updated data:", error));
+
+          // Emit WebSocket event to refresh real-time status
+          socket.emit('refreshRealTimeStatus');
+
+          // Highlight submitted rows
+          document.querySelectorAll(`#shift${shift}-table tbody tr`).forEach(row => {
+            row.querySelector('.objective').classList.add('green');
+          });
+        }
+      }).catch(error => {
+        console.error(`❌ API Error: ${error.message}`);
+        alert("An error occurred while submitting. Please try again.");
+      });
+    }
+
+    // Loads previously submitted shift data from the database and repopulates the UI
+    function loadSubmittedData() {
+      const day = getAustinDateString();
+
+      fetchAPI(`/api/get-submitted-data?day=${day}`)
+        .then(data => {
+          if (!data || data.length === 0) {
+            console.log('No stored data for today.');
+            return;
+          }
+          console.log('Loaded submitted data:', data);
+
+          const shiftDataMap = {};
+          data.forEach(entry => {
+            if (!entry.plyCutter || !entry.shift) {
+              console.warn(`⚠️ Skipping invalid entry:`, entry);
+              return;
+            }
+
+            if (!shiftDataMap[entry.shift]) {
+              shiftDataMap[entry.shift] = [];
+            }
+            shiftDataMap[entry.shift].push(entry);
+          });
+
+          Object.entries(shiftDataMap).forEach(([shift, entries]) => {
+            const shiftTable = document.querySelector(`#shift${shift}-table tbody`);
+            if (!shiftTable) {
+              console.error(`❌ Shift table for shift ${shift} not found.`);
+              return;
+            }
+
+            entries.forEach(entry => {
+              const row = Array.from(shiftTable.rows)
+                .find(r => r.cells[0].textContent.trim() === entry.plyCutter);
+              if (!row) {
+                console.error(`❌ Row for ${entry.plyCutter} not found in shift ${shift}.`);
+                return;
+              }
+
+              // Restore Objective Value
+              const objectiveCell = row.querySelector('.objective');
+              objectiveCell.textContent = entry.obj_value || 0;
+
+              // Restore Program Selection
+              const programSelect = row.querySelector('.program-select');
+              if (programSelect) {
+                programSelect.value = entry.program;
+              } else {
+                console.error(`❌ Program dropdown not found in row ${entry.plyCutter}`);
+              }
+
+              // Restore Checkbox States (Trainee & Floater)
+              row.querySelector('.trainee-checkbox').checked = Boolean(entry.trainee);
+              row.querySelector('.floater-checkbox').checked = Boolean(entry.floater);
+
+              // Restore green highlight
+              if (entry.submitted) {
+                objectiveCell.classList.add('green');
+              } else {
+                objectiveCell.classList.remove('green');
+              }
+            });
+          });
+        })
+        .catch(error => console.error('❌ Error fetching submitted data:', error));
+    }
+
+    // Retrieves the current status of all machines (UP/DOWN) from the backend
+    function fetchMachineStatuses() {
+      const day = getAustinDateString();
+      fetchAPI(`/api/get-all-status?day=${day}`).then(machineStatuses => {
+        applyMachineStatus(machineStatuses);
+      });
+    }
+
+    const downMachines = new Set();  // Keep track of all DOWN machines
+
+    // Applies machine status to the UI, disables input for DOWN machines
+    function applyMachineStatus(machineStatuses) {
+      document
+        .querySelectorAll(`#shift1-table tbody tr, #shift2-table tbody tr, #shift3-table tbody tr`)
+        .forEach(row => {
+          const plyCutter = row.cells[0].textContent.trim();
+          const objCell = row.querySelector('.objective');
+          const machine = machineStatuses.find(m => m.plyCutter === plyCutter);
+
+          if (machine && machine.status.toLowerCase() === 'down') {
+            row.classList.add('down');
+            downMachines.add(plyCutter);
+            if (!objCell.dataset.originalValue) {
+              objCell.dataset.originalValue = objCell.textContent;
+            }
+            objCell.textContent = 'DOWN';
+          } else if (!downMachines.has(plyCutter)) {
+            row.classList.remove('down');
+            if (objCell.dataset.originalValue) {
+              objCell.textContent = objCell.dataset.originalValue;
+              delete objCell.dataset.originalValue;
+            }
+          }
+        });
+    }
+
+    // Initializes tables and data fetching once the page is fully loaded
+    document.addEventListener('DOMContentLoaded', () => {
+      loadConfigAndInit();
+    });
+  </script>
+  <script src="/js/utils.js"></script>
+
+  <script src="/js/utils.js"></script>
+</body>
+</html>

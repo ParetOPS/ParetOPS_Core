@@ -1,0 +1,880 @@
+<!--
+  maintenance_screen.html - CONFIDENTIAL - PROPERTY OF PARETOPS
+
+  For support, bug reports, or system feedback, contact support@paretops.com
+
+  DESCRIPTION:
+  This page provides detailed logging and status tracking for individual ply cutters.
+  It is the operational interface for technicians to record maintenance events, update machine status (UP/DOWN),
+  and monitor real-time logs and historical events.
+
+  PURPOSE:
+  - Allow operators and technicians to start and end maintenance events for a specific machine.
+  - Log and update reasons, work orders, and comments tied to each downtime.
+  - Display the most recent active log and the last three completed logs for quick review.
+  - Synchronize machine status across the system in real time.
+
+  FEATURES:
+  - Status toggle button (UP/DOWN) with automatic log creation on state change.
+  - Editable dropdown for downtime reasons and freeform fields for WO# and comments.
+  - Asynchronous fetch and update of logs via REST API.
+  - Automatic timestamp formatting and client-side validation.
+  - Built-in log submission, update, and deletion features.
+
+  DEPLOYMENT:
+  - Served from `/public/maintenance_screen.html`.
+  - Accessed via dynamic route: `/maintenance_screen/:plyCutter`.
+  - Requires backend API endpoints:
+    • `/get_logs`
+    • `/insert_log`
+    • `/update_log`
+    • `/delete_log/:id`
+    • `/get_machine_status`
+    • `/update_status`
+
+  DEPENDENCIES:
+  - Bootstrap 4.5 for layout and modals.
+  - Font Awesome for iconography.
+  - jQuery (for compatibility only; minimal usage).
+  - Custom helper script: `/js/utils.js`
+
+  AUTHOR:
+  Paulin Colin BANCKAERT — Maintenance screen v3.0.0
+
+  VERSIONING:
+  - Managed in Git. Always verify API compatibility before deploying changes to log structures or status logic.
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maintenance - PCX</title>
+    
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="icon" type="image/png" href="/favicon.png">
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    <style>
+        body {
+            background-color: #f4f7fc;
+            font-family: 'Roboto', Arial, sans-serif;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: auto;
+        }
+
+        .status-btn {
+            font-size: 1.5rem;
+            font-weight: bold;
+            padding: 10px 10px;
+            border-radius: 8px;
+            width: 20%;
+        }
+
+        .up {
+            background-color: #28a745;
+            color: white;
+        }
+
+        .down {
+            background-color: #dc3545;
+            color: white;
+        }
+
+        .container {
+            max-width: 1100px; /* Keep it wide but slightly smaller */
+            margin: auto;
+            padding: 10px; /* Reduce padding */
+        }
+
+        .table-container {
+            margin-top: 10px; /* Reduce space between tables */
+        }
+
+        th {
+            background-color: #007bff; /* Restore header background color */
+            color: white; /* Restore text color */
+            padding: 4px; /* Reduce padding */
+            font-size: 14px; /* Keep it readable */
+            text-align: center;
+        }
+
+        td {
+            padding: 3px 5px; /* Reduce padding */
+            font-size: 13px; /* Slightly smaller text */
+            vertical-align: middle; /* Keep text centered in cells */
+        }
+
+        .table-container table {
+            width: 100%;
+            max-width: 100%;
+            border-collapse: collapse; /* Remove extra spacing between rows */
+        }
+
+
+        .status-btn {
+            font-size: 1.2rem; /* Make the button slightly smaller */
+            padding: 6px 10px; /* Reduce button padding */
+            width: 15%; /* Adjust button size */
+        }
+
+        .wo-comment-container {
+            display: flex;
+            gap: 5px; /* Reduce spacing between fields */
+            align-items: center;
+        }
+
+        .wo-input {
+            width: 18%; /* Make WO box slightly smaller */
+            min-width: 100px;
+            font-size: 13px; /* Reduce input text size */
+            padding: 4px; /* Reduce padding */
+        }
+
+        .comment-input {
+            width: 75%; /* Keep Comment box wide */
+            font-size: 13px; /* Reduce input text size */
+            padding: 4px;
+        }
+
+
+        .home-button {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background-color: #343a40;
+            color: white;
+            padding: 10px 12px;
+            border-radius: 6px;
+            font-size: 1.1rem;
+            text-decoration: none;
+            transition: background-color 0.2s ease-in-out;
+            box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .home-button:hover {
+            background-color: #1d2124;
+        }
+    </style>
+</head>
+<body>
+
+    <a href="/" class="home-button"><i class="fas fa-home"></i> Home</a>
+
+    <div class="container text-center">
+        <h1 id="title" class="my-4">Maintenance - </h1>
+
+        <button id="statusBtn" class="btn status-btn up">UP</button>
+
+        <div class="table-container mt-4">
+            <h2>Current Log</h2>
+            <table class="table table-bordered table-striped">
+                <thead>
+                    <tr>
+                        <th>Start Time</th>
+                        <th>End Time</th>
+                        <th>Duration (hours)</th>
+                        <th>Reason</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="logTable"></tbody>
+            </table>
+        </div>
+        <button id="submitCurrentLog" class="btn btn-primary mt-3">Submit Current Log</button>
+
+        <div class="table-container mt-4">
+            <h2>3 Last Logs</h2>
+            <table class="table table-bordered table-striped">
+                <thead>
+                    <tr>
+                        <th>Start Time</th>
+                        <th>End Time</th>
+                        <th>Duration (hours)</th>
+                        <th>Reason</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>                
+                <tbody id="logHistory"></tbody>
+            </table>
+        </div>
+        <button id="submitLastLogs" class="btn btn-primary mt-3">Submit Last Logs</button>
+
+    </div>
+
+    <script>
+
+        const urlParts = window.location.pathname.split('/');
+        const pcNumber = urlParts[urlParts.length - 1];
+        document.getElementById('title').textContent = `Maintenance - ${pcNumber}`;
+
+        let status = 'UP';
+        let start_time = null;
+        let currentRow = null;
+        const statusBtn = document.getElementById('statusBtn');
+        const logTable = document.getElementById('logTable');
+        const logHistory = document.getElementById('logHistory');
+
+        // Load the most recently defined machine status from the database
+        function loadMachineStatus() {
+            fetch("/get_machine_status?plyCutter=" + pcNumber)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'DOWN') {
+                        status = 'DOWN';
+                        statusBtn.classList.remove('up', 'btn-success');
+                        statusBtn.classList.add('down', 'btn-danger');
+                        statusBtn.textContent = 'DOWN';
+                    } else {
+                        status = 'UP';
+                        statusBtn.classList.remove('down', 'btn-danger');
+                        statusBtn.classList.add('up', 'btn-success');
+                        statusBtn.textContent = 'UP';
+                    }
+                })
+                .catch(error => console.error("❌ Error loading status:", error));
+
+                fetch("/get_logs?plyCutter=" + pcNumber)
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log("🔍 Logs retrieved:", data);
+
+                        if (data.activeLog) {
+                            addCurrentLog(data.activeLog);  // ✅ Display active log if it exist
+                        }
+
+                        if (data.historyLogs.length > 0) {
+                            loadLastLogs(data.historyLogs); // ✅ Load last 3 logs
+                        }
+                    })
+                    .catch(error => console.error("❌ Error loading logs:", error));
+
+        }
+
+        // Send a status update (UP/DOWN) for a specific ply cutter to the backend
+        function updateMachineStatus(plyCutter, status) {
+            console.log("Sending status update:", { plyCutter, status });
+
+            fetch('/update_status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ plyCutter, status })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log("✅ Status updated:", data);
+            })
+            .catch(error => {
+                console.error("❌ Failed to update machine status:", error);
+            });
+        }
+
+        // Load most recent log 
+        function addCurrentLog(log) {
+            if (!log || !log.start_time) {
+                console.warn("⚠️ No active log found.");
+                return;
+            }
+
+            currentRow = document.createElement('tr');
+            currentRow.innerHTML = `
+                <td data-raw="${log.start_time}"><span data-timestamp="${log.start_time}"></span></td>
+                <td data-raw="${log.end_time || ""}"><span data-timestamp="${log.end_time || ""}"></span></td>
+                <td>${log.duration || ''}</td>
+                <td>
+                    <select class="form-control">
+                        <option ${log.reason === 'Not Specified' ? 'selected' : ''}>Not Specified</option>
+                        <option ${log.reason === 'Mechanical' ? 'selected' : ''}>Mechanical</option>
+                        <option ${log.reason === 'Electrical' ? 'selected' : ''}>Electrical</option>
+                        <option ${log.reason === 'Pressure' ? 'selected' : ''}>Pressure</option>
+                        <option ${log.reason === 'Fault' ? 'selected' : ''}>Fault</option>
+                        <option ${log.reason === 'PM (Lasershoot)' ? 'selected' : ''}>PM (Lasershoot)</option>
+                        <option ${log.reason === 'PM (Other)' ? 'selected' : ''}>PM (Other)</option>
+                        <option ${log.reason === 'ENG Testing' ? 'selected' : ''}>ENG Testing</option>
+                        <option ${log.reason === 'Calibration' ? 'selected' : ''}>Calibration</option>
+                        <option ${log.reason === 'Other' ? 'selected' : ''}>Other</option>
+                    </select>
+                </td>
+                <td>
+                    <button class="btn btn-sm btn-danger delete-log-btn" data-id="${log.id}">Delete</button>
+                </td>
+            `;
+
+            logTable.appendChild(currentRow);
+
+            var secondRow = document.createElement('tr');
+            secondRow.innerHTML = `
+                <td colspan="4">
+                    <div class="wo-comment-container">
+                        <input id="woInput" type="text" class="form-control wo-input" placeholder="WO#" value="${log.work_order || ''}">
+                        <input id="commentInput" type="text" class="form-control comment-input" placeholder="Enter a comment" value="${log.comment || ''}">
+                    </div>
+                </td>
+            `;
+            logTable.appendChild(secondRow);
+            formatAllTimestamps();
+        }
+
+        // Populate the current active maintenance log (if any) into the table
+        function loadLastLogs(logs) {
+            logHistory.innerHTML = ""; // Clear history before adding new logs
+
+            let recentLogs = logs.slice(0, 3);
+
+            recentLogs.forEach(log => {
+                var logRow = document.createElement('tr');
+                    logRow.innerHTML = `
+                    <td data-raw="${log.start_time}"><span data-timestamp="${log.start_time}"></span></td>
+                    <td data-raw="${log.end_time || ""}"><span data-timestamp="${log.end_time || ""}"></span></td>
+
+                    <td>${log.duration || ''}</td>
+                    <td>
+                        <select class="form-control">
+                            <option ${log.reason === 'Not Specified' ? 'selected' : ''}>Not Specified</option>
+                            <option ${log.reason === 'Mechanical' ? 'selected' : ''}>Mechanical</option>
+                            <option ${log.reason === 'Electrical' ? 'selected' : ''}>Electrical</option>
+                            <option ${log.reason === 'Pressure' ? 'selected' : ''}>Pressure</option>
+                            <option ${log.reason === 'Fault' ? 'selected' : ''}>Fault</option>
+                            <option ${log.reason === 'PM (Lasershoot)' ? 'selected' : ''}>PM (Lasershoot)</option>
+                            <option ${log.reason === 'PM (Other)' ? 'selected' : ''}>PM (Other)</option>
+                            <option ${log.reason === 'ENG Testing' ? 'selected' : ''}>ENG Testing</option>
+                            <option ${log.reason === 'Calibration' ? 'selected' : ''}>Calibration</option>
+                            <option ${log.reason === 'Other' ? 'selected' : ''}>Other</option>
+                        </select>
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-danger delete-log-btn" data-id="${log.id}">Delete</button>
+                    </td>
+                `;
+
+                logHistory.appendChild(logRow);
+
+                var secondRow = document.createElement('tr');
+                secondRow.innerHTML = `
+                    <td colspan="5">
+                        <div class="wo-comment-container">
+                            <input type="text" class="form-control wo-input" placeholder="WO#" value="${log.work_order || ''}">
+                            <input type="text" class="form-control comment-input" placeholder="Enter a comment" value="${log.comment || ''}">
+                        </div>
+                    </td>
+                `;
+                
+                logHistory.appendChild(secondRow);
+            });
+            formatAllTimestamps();
+        }
+
+        // Display the three most recent completed maintenance logs in the history section
+        function insertMaintenanceLog(data) {
+            console.log("Sending maintenance log:", data);
+
+            fetch('/insert_log', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    logs: [
+                        {
+                            plyCutter: data.plyCutter,
+                            start_time: data.start_time,
+                            end_time: data.end_time || null,
+                            duration: data.duration || null,
+                            reason: data.reason || "Not specified", // ✅ Default value
+                            work_order: data.work_order && data.work_order.trim() !== "" ? data.work_order : null,
+                            comment: data.comment && data.comment.trim() !== "" ? data.comment : null
+                        }
+                    ]
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log("✅ Log inserted:", data);
+            })
+            .catch(error => {
+                console.error("❌ Failed to insert maintenance log:", error);
+            });
+        }
+
+        // Insert a new maintenance log into the database (used when switching to DOWN)
+        statusBtn.addEventListener('click', () => {
+            const now = new Date();
+
+            if (status === 'UP') {
+                // 🔻 Switching to DOWN
+                status = 'DOWN';
+                start_time = now;
+                end_time = null;  // Reset end_time
+
+                console.log("Switching to DOWN. Start time set.");
+
+                // Change button appearance
+                statusBtn.classList.remove('up', 'btn-success');
+                statusBtn.classList.add('down', 'btn-danger');
+                statusBtn.textContent = 'DOWN';
+                updateMachineStatus(pcNumber, 'DOWN');
+
+                // ✅ Auto-insert new maintenance log when switching to DOWN
+                insertMaintenanceLog({
+                    plyCutter: pcNumber,
+                    start_time: start_time ? toMySQLTimestamp(start_time) : null,
+                    end_time: null, // No end time yet
+                    duration: null,
+                    reason: null,
+                    work_order: null,
+                    comment: null
+                });
+
+                // Move last row to history if exists
+                if (logTable.children.length > 1) {  
+                    let previousRow = logTable.children[0];
+                    let woCommentRow = logTable.children[1];
+
+                    logTable.removeChild(previousRow);
+                    logTable.removeChild(woCommentRow);
+
+                    logHistory.prepend(woCommentRow);
+                    logHistory.prepend(previousRow);
+
+                    if (logHistory.children.length > 6) { 
+                        logHistory.removeChild(logHistory.lastChild);
+                        logHistory.removeChild(logHistory.lastChild);
+                    }
+                }
+
+                // Create a new log row
+                currentRow = document.createElement('tr');
+                logTable.appendChild(currentRow);
+                const secondRow = document.createElement('tr');
+                secondRow.innerHTML = `
+                    <td colspan="4">
+                        <div class="wo-comment-container">
+                            <input id="woInput" type="text" class="form-control wo-input" placeholder="WO#">
+                            <input id="commentInput" type="text" class="form-control comment-input" placeholder="Enter a comment">
+                        </div>
+                    </td>
+                `;
+                logTable.appendChild(secondRow);
+
+                const formattedTimestamp = start_time.toISOString(); // UTC ISO format
+
+                    currentRow.innerHTML = `
+                    <td data-raw="${formattedTimestamp}"><span data-timestamp="${formattedTimestamp}"></span></td>
+                    <td data-raw=""></td>
+                    <td></td>
+                    <td>
+                        <select class="form-control">
+                            <option>Not Specified</option>
+                            <option>Mechanical</option>
+                            <option>Electrical</option>
+                            <option>Pressure</option>
+                            <option>Fault</option>
+                            <option>PM (Lasershoot)</option>
+                            <option>PM (Other)</option>
+                            <option>ENG Testing</option>
+                            <option>Calibration</option>
+                            <option>Other</option>
+                        </select>
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-danger delete-log-btn" data-id="">Delete</button>
+                    </td>
+                `;
+                formatAllTimestamps();
+
+
+            } else {
+                // 🔺 Switching to UP
+                status = 'UP';
+                end_time = now;
+                console.log("Switching to UP. End time set.");
+
+                // Calculate duration
+                const duration = ""; // Let the database calculate it
+
+                if (currentRow) {
+                    // Read the raw end_time (UTC) and write it directly into a span for dynamic formatting
+                    const endISO = end_time.toISOString();
+                    currentRow.cells[1].innerHTML = `<span data-timestamp="${endISO}"></span>`;
+                    currentRow.cells[1].setAttribute("data-raw", endISO);
+                    currentRow.cells[0].setAttribute("data-raw", currentRow.cells[0].querySelector('span').getAttribute('data-timestamp'));
+                    formatAllTimestamps();
+
+
+                    // Update the duration cell
+                    const startISO = currentRow.cells[0].getAttribute("data-raw");
+                    if (startISO) {
+                        const diffMs = new Date(endISO) - new Date(startISO);
+                        const hours = (diffMs / (1000 * 60 * 60)).toFixed(2);
+                        currentRow.cells[2].textContent = hours;
+                    }
+
+                    // Get reason from dropdown
+                    const reasonSelect = currentRow.cells[3].querySelector('select');
+                    const reason = reasonSelect ? reasonSelect.value : "Not Specified";
+
+                    // Get work order and comment values
+                    const comment = document.getElementById('commentInput').value;
+                    const work_order = document.getElementById('woInput').value;
+
+                    // Fetch the active log from the server to retrieve its ID
+                    fetch(`/get_logs?plyCutter=${pcNumber}`, {
+                            method: "GET",
+                            cache: "no-store"
+                        })
+                        .then(res => res.json())
+                        .then(({ activeLog }) => {
+                            if (activeLog && activeLog.start_time) {
+                                const updatePayload = {
+                                    logs: [{
+                                        id: activeLog.id,
+                                        plyCutter: pcNumber,
+                                        start_time: activeLog.start_time,
+                                        end_time: toMySQLTimestamp(end_time),
+                                        reason,
+                                        work_order,
+                                        comment
+                                    }]
+                                };
+
+                                console.log("Sending log update:", updatePayload);
+
+                                fetch('/update_log', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify(updatePayload)
+                                })
+                                .then(response => response.json())
+                                .then(data => {
+                                    console.log("Log updated successfully:", data);
+
+                                    // Fetch the updated duration from the server
+                                    fetch(`/get_logs?plyCutter=${pcNumber}`, {
+                                            method: "GET",
+                                            cache: "no-store"
+                                        })
+                                        .then(res => res.json())
+                                        .then(({ historyLogs }) => {
+                                            const updatedLog = historyLogs.find(log =>
+                                                log.start_time === updatePayload.logs[0].start_time
+                                            );
+                                            if (updatedLog) {
+                                                currentRow.cells[2].textContent = updatedLog.duration;
+                                                console.log("Updated duration:", updatedLog.duration);
+                                            }
+
+                                            // Move the row to the log history table
+                                            if (logTable.children.length >= 2) {
+                                                const currentMainRow = logTable.children[0];
+                                                const currentInputRow = logTable.children[1];
+
+                                                logTable.removeChild(currentMainRow);
+                                                logTable.removeChild(currentInputRow);
+
+                                                logHistory.prepend(currentInputRow);
+                                                logHistory.prepend(currentMainRow);
+
+                                                while (logHistory.children.length > 6) {
+                                                    logHistory.removeChild(logHistory.lastChild);
+                                                }
+
+                                                currentRow = null;
+                                            }
+                                        });
+                                })
+                                .catch(error => {
+                                    console.error("Error updating log:", error);
+                                });
+                            } else {
+                                console.warn("No active log found to update.");
+                            }
+                        });
+
+                    // Mirror the history movement immediately (optional pre-visual feedback)
+                    if (logTable.children.length >= 2) {
+                        const currentMainRow = logTable.children[0];
+                        const currentInputRow = logTable.children[1];
+
+                        logTable.removeChild(currentMainRow);
+                        logTable.removeChild(currentInputRow);
+
+                        logHistory.prepend(currentInputRow);
+                        logHistory.prepend(currentMainRow);
+
+                        while (logHistory.children.length > 6) {
+                            logHistory.removeChild(logHistory.lastChild);
+                        }
+                    }
+
+                    currentRow = null;
+                }
+
+
+                // Update machine status to UP
+                updateMachineStatus(pcNumber, 'UP');
+                statusBtn.classList.remove('down', 'btn-danger');
+                statusBtn.classList.add('up', 'btn-success');
+                statusBtn.textContent = 'UP';
+
+            }
+        });
+
+        const toMySQL = (v) => {
+        if (!v) return null;
+        // Si c’est déjà "YYYY-MM-DD HH:MM:SS" -> renvoyer tel quel
+        if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(String(v))) return String(v);
+        const d = (v instanceof Date) ? v : new Date(v);
+        if (isNaN(d.getTime())) return null;
+        const pad = n => String(n).padStart(2, '0');
+        return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+        };
+        // Pour comparer deux timestamps quelle que soit leur forme (ISO/MySQL/Date)
+        const tsKey = (v) => {
+        const d = (v instanceof Date) ? v : new Date(v);
+        return isNaN(d.getTime()) ? null : d.getTime(); // clé en ms
+        };
+
+        // Submit edits or additions for the three last logs (lower table)
+        document.getElementById("submitCurrentLog").addEventListener("click", async () => {
+            const logsToInsert = [];
+            const logsToUpdate = [];
+
+            const logRows = document.querySelectorAll("#logTable tr");
+
+            // Step 1 – Get latest logs from server
+            let existingLogs = [];
+            try {
+                const res = await fetch(`/get_logs?plyCutter=${pcNumber}`, {
+                    method: "GET",
+                    cache: "no-store"
+                });
+                const { activeLog, historyLogs } = await res.json();
+                if (activeLog) existingLogs.push(activeLog);
+                if (historyLogs?.length) existingLogs = existingLogs.concat(historyLogs);
+            } catch (err) {
+                console.error("❌ Failed to fetch logs:", err);
+                return;
+            }
+
+            // Step 2 – Loop through visible log rows
+            for (let i = 0; i < logRows.length; i += 2) {
+                const mainRow = logRows[i];
+                const inputRow = logRows[i + 1];
+
+                const start_time = mainRow.cells[0]?.getAttribute('data-raw')?.trim() || null;
+                const end_time = mainRow.cells[1]?.getAttribute("data-raw")?.trim() || null;
+                const duration = mainRow.cells[2]?.textContent?.trim() || null;
+                const reason = mainRow.cells[3]?.querySelector("select")?.value || mainRow.cells[3]?.textContent?.trim() || null;
+                const work_order = inputRow?.querySelector(".wo-input")?.value?.trim() || null;
+                const comment = inputRow?.querySelector(".comment-input")?.value?.trim() || null;
+
+
+                if (!start_time) {
+                    console.warn("⚠️ Skipping row with missing start time");
+                    continue;
+                }
+
+                const keyRow = tsKey(start_time);
+                const matchedLog = existingLogs.find(log => tsKey(log.start_time) === keyRow);
+
+                if (matchedLog) {
+                    logsToUpdate.push({
+                        id: matchedLog.id,
+                        plyCutter: pcNumber,
+                        start_time: toMySQL(start_time),
+                        end_time: end_time ? toMySQL(end_time) : null,
+                        reason: reason ?? matchedLog.reason,
+                        work_order: work_order || matchedLog.work_order,
+                        comment: comment ?? matchedLog.comment
+                    });
+
+                } else {
+                    logsToInsert.push({
+                        plyCutter: pcNumber,
+                        start_time: toMySQL(start_time),
+                        end_time: end_time ? toMySQL(end_time) : null,
+                        reason: reason,
+                        work_order: work_order,
+                        comment: comment
+                    });
+                }
+            }
+
+            // Step 3 – Submit changes
+            if (logsToInsert.length === 0 && logsToUpdate.length === 0) {
+                alert("No changes detected. Nothing to submit.");
+                return;
+            }
+
+            if (logsToUpdate.length > 0) {
+                console.log("🔄 Updating logs:", logsToUpdate);
+                try {
+                    const res = await fetch('/update_log', {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ logs: logsToUpdate })
+                    });
+                    const result = await res.json();
+                    console.log("✅ Updated logs:", result);
+                } catch (err) {
+                    console.error("❌ Update failed:", err);
+                }
+            }
+
+            if (logsToInsert.length > 0) {
+                console.log("📤 Inserting new logs:", logsToInsert);
+                try {
+                    const res = await fetch('/insert_log', {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ logs: logsToInsert })
+                    });
+                    const result = await res.json();
+                    console.log("✅ Inserted logs:", result);
+                } catch (err) {
+                    console.error("❌ Insert failed:", err);
+                }
+            }
+        });
+
+        // Submit the current log data to the backend (active log row in the top table)
+        document.getElementById("submitLastLogs").addEventListener("click", async () => {
+            const logsToInsert = [];
+            const logsToUpdate = [];
+
+            const logRows = document.querySelectorAll("#logHistory tr");
+
+            // 1. Fetch existing logs
+            let existingLogs = [];
+            try {
+                const res = await fetch(`/get_logs?plyCutter=${pcNumber}`, {
+                    method: "GET",
+                    cache: "no-store"
+                });
+                const { activeLog, historyLogs } = await res.json();
+                if (activeLog) existingLogs.push(activeLog);
+                if (historyLogs?.length) existingLogs = existingLogs.concat(historyLogs);
+            } catch (err) {
+                console.error("❌ Failed to fetch logs:", err);
+                return;
+            }
+
+            // 2. Loop through each log pair (main + input)
+            for (let i = 0; i < logRows.length; i += 2) {
+                const mainRow = logRows[i];
+                const inputRow = logRows[i + 1];
+
+                const start_time = mainRow.cells[0]?.getAttribute("data-raw")?.trim();
+                if (!start_time) continue;
+
+                const end_time = mainRow.cells[1]?.getAttribute("data-raw")?.trim() || null;
+                const duration = mainRow.cells[2]?.textContent?.trim() || null;
+                const reason = mainRow.cells[3]?.querySelector("select")?.value || mainRow.cells[3]?.textContent?.trim() || null;
+                const work_order = inputRow?.querySelector(".wo-input")?.value?.trim() || null;
+                const comment = inputRow?.querySelector(".comment-input")?.value?.trim() || null;
+
+
+                const matchedLog = existingLogs.find(log => log.start_time === start_time);
+
+                if (matchedLog) {
+                    console.log(`✏️ Modifying log with exact match (${matchedLog.start_time})`);
+                    logsToUpdate.push({
+                        id: matchedLog.id,
+                        plyCutter: pcNumber,
+                        start_time: new Date(start_time).toISOString(),  // Format ISO UTC
+
+                        end_time: end_time ? toMySQLTimestamp(end_time) : null,
+                        reason: reason ?? matchedLog.reason,
+                        work_order: work_order || matchedLog.work_order,
+                        comment: comment ?? matchedLog.comment
+                    }); 
+
+                } else {
+                    logsToInsert.push({
+                        plyCutter: pcNumber,
+                        start_time: new Date(start_time).toISOString(),  // Format ISO UTC
+
+                        end_time: end_time ? toMySQLTimestamp(end_time) : null,
+                        reason: reason,
+                        work_order: work_order,
+                        comment: comment
+                    });
+                }
+            }
+
+            // 3. Submit if anything changed
+            if (logsToInsert.length === 0 && logsToUpdate.length === 0) {
+                alert("No changes detected. Nothing to submit.");
+                return;
+            }
+
+            if (logsToUpdate.length > 0) {
+                console.log("🔄 Updating logs:", logsToUpdate);
+                try {
+                    const res = await fetch('/update_log', {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ logs: logsToUpdate })
+                    });
+                    const data = await res.json();
+                    console.log("✅ Logs updated:", data);
+                } catch (err) {
+                    console.error("❌ Failed to update logs:", err);
+                }
+            }
+
+            if (logsToInsert.length > 0) {
+                console.log("📤 Inserting new logs:", logsToInsert);
+                try {
+                    const res = await fetch('/insert_log', {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ logs: logsToInsert })
+                    });
+                    const data = await res.json();
+                    console.log("✅ Logs inserted:", data);
+                } catch (err) {
+                    console.error("❌ Failed to insert logs:", err);
+                }
+            }
+        });
+
+        // Load all necessary data when the page finishes loading (status, logs, etc.)
+        document.addEventListener("DOMContentLoaded", function() {
+            console.log("🔄 Reloading page, fetching logs...");
+            loadMachineStatus();
+        });
+
+        // Handle click events for deleting logs using the delete buttons
+        document.addEventListener('click', async function(event) {
+            if (event.target.classList.contains('delete-log-btn')) {
+                const logId = event.target.getAttribute('data-id');
+                if (!confirm('Are you sure you want to delete this log?')) return;
+
+                try {
+                    const res = await fetch(`/delete_log/${logId}`, { method: 'DELETE' });
+                    const result = await res.json();
+                    if (result.message) {
+                        alert('Log deleted successfully');
+                        location.reload(); // or re-run loadMachineStatus();
+                    } else {
+                        alert('Error deleting log');
+                    }
+                } catch (err) {
+                    console.error('❌ Failed to delete log:', err);
+                }
+            }
+        });
+
+        </script>
+    <script src="/js/utils.js"></script>
+</body>
+</html>
+
+
+
