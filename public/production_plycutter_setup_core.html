@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ParetOPS • Production Grid (Meetings + Short Shift) — Themed</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#121a2b; --slab:#1a2132; --slab-hover:#222b42;
+    --txt:#e6eefc; --muted:#8fa0c2; --ok:#1fd286; --accent:#6aa3ff; --danger:#ff6a6a;
+    --border:rgba(255,255,255,.10); --radius:14px;
+    --danger-soft: rgba(255,106,106,.12);
+    --danger-soft-b: rgba(255,106,106,.35);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:500 14px/1.4 Inter,system-ui}
+  .wrap{max-width:1600px;margin:32px auto;padding:0 20px}
+  .header{margin-bottom:18px;text-align:center}
+  .header h1{margin:0;font-size:20px;font-weight:700}
+  .sub{color:var(--muted);font-size:12px}
+
+  /* GRID */
+  .grid{
+    display:grid;
+    grid-template-columns: 140px repeat(8, 150px);
+    /* 1ère ligne = entêtes machines ; puis 3 shifts un peu plus hauts ; puis la demande */
+    grid-template-rows: 80px repeat(3, 168px) 148px;
+    gap:16px;
+  }
+  .cell{
+    position:relative;background:var(--card);border-radius:var(--radius);
+    box-shadow:0 6px 20px rgba(0,0,0,.4);
+    padding:12px;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;
+  }
+  .cell.header{display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02)),var(--card);
+    font-weight:700}
+  .cell.shift{display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;font-weight:700}
+
+  .shift-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+  .btn{
+    appearance:none;border:1px solid var(--border);background:rgba(255,255,255,.04);
+    padding:6px 10px;border-radius:10px;color:var(--txt);cursor:pointer;font-weight:600
+  }
+  .btn:hover{background:rgba(255,255,255,.08)}
+  .btn-primary{border-color:transparent;background:var(--accent);color:black}
+  .btn-danger{border-color:transparent;background:var(--danger);color:black}
+  .btn-flag{background:var(--danger-soft);border-color:var(--danger-soft-b)}
+
+  /* top slab */
+  .slab{
+    background:var(--slab);border-radius:12px;min-height:64px;display:flex;
+    align-items:center;justify-content:center;position:relative;cursor:pointer;user-select:none;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.04); padding:6px 10px;
+    border:1px solid var(--border);
+  }
+  .slab:hover{background:var(--slab-hover)}
+  .slab.themed{
+    /* couleur douce + liseré */
+    background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.02)), var(--theme-soft);
+    border-color: color-mix(in srgb, var(--theme) 35%, transparent);
+  }
+  .display{display:none;align-items:baseline;gap:8px;font-weight:900}
+  .val{font-size:28px;line-height:1}
+  .prog{font-size:26px;opacity:.96}
+  .idle-only{font-size:28px;font-weight:900}
+
+  /* centered inline range */
+  .range-wrap{position:absolute;left:50%;transform:translateX(-50%);bottom:70px;width:calc(100% - 30px);
+    display:none;align-items:center;justify-content:center;gap:8px;background:rgba(255,255,255,.04);
+    border:1px solid var(--border);border-radius:10px;padding:6px 8px;z-index:3}
+  .range-wrap.open{display:flex}
+  .range-val{font-weight:800;min-width:36px;text-align:center}
+  input[type=range]{flex:1;accent-color:var(--ok);min-width:90px;max-width:110px}
+
+  /* bottom of cell */
+  .bottom{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:0 2px 2px;text-align:center}
+  .tiny{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid var(--border);cursor:pointer;color:var(--muted)}
+  .tiny input{appearance:none;width:10px;height:10px;border-radius:4px;border:1px solid rgba(255,255,255,.4);background:transparent}
+  .tiny input:checked{background:var(--ok);border-color:transparent}
+
+  /* program flyout (dark) */
+  .menu-flyout{position:fixed;background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,.02));
+    border:1px solid var(--border);border-radius:12px;box-shadow:0 10px 26px rgba(0,0,0,.45),0 0 0 1px rgba(255,255,255,.04) inset;
+    display:none;z-index:9999;overflow:hidden;color:var(--txt)}
+  .menu-flyout.open{display:block}
+  .mi{padding:10px 14px;display:flex;align-items:center;gap:10px;cursor:pointer}
+  .mi + .mi{border-top:1px solid rgba(255,255,255,.06)}
+  .mi:hover{background:rgba(255,255,255,.06)}
+  .dot{width:10px;height:10px;border-radius:50%;flex:0 0 10px;box-shadow:0 0 0 2px rgba(255,255,255,.10) inset}
+
+  /* Inputs — force dark */
+  select, input[type=number]{
+    background:rgba(255,255,255,.06);
+    border:1px solid var(--border);
+    color:var(--txt);
+    border-radius:10px;
+    padding:8px;
+  }
+  select option, select optgroup{ background-color: var(--slab) !important; color: var(--txt) !important; }
+  select:focus, input[type=number]:focus{outline:none;border-color:rgba(255,255,255,.35);box-shadow:0 0 0 3px rgba(255,255,255,.09)}
+  :root, body { color-scheme: dark; }
+
+  /* Modal */
+  .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:10000}
+  .modal.open{display:flex}
+  .backdrop{position:absolute;inset:0;background:rgba(0,0,0,.55)}
+  .modal-card{position:relative;width:min(860px,92vw);max-height:88vh;overflow:auto;background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.55)}
+  .mc-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border)}
+  .mc-head h3{margin:0;font-size:16px}
+  .mc-body{padding:16px}
+  .mc-foot{padding:12px 16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
+  .muted{color:var(--muted)}
+  .form-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .field{display:flex;flex-direction:column;gap:6px}
+  .kpi{font-size:12px;color:var(--muted)}
+
+  /* Meetings specific */
+  .mc-body.meet{display:grid;grid-template-columns: 1fr 320px;gap:16px}
+  .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,.04);cursor:pointer}
+  .chip input{appearance:none;width:12px;height:12px;border-radius:4px;border:1px solid rgba(255,255,255,.4)}
+  .chip input:checked{background:var(--ok);border-color:transparent}
+  .list{border:1px solid var(--border);border-radius:12px;overflow:hidden}
+  .list table{width:100%;border-collapse:collapse}
+  .list th,.list td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.06);font-size:13px;text-align:left}
+  .list th{background:rgba(255,255,255,.03)}
+  .actions button{margin-right:6px}
+
+  /* ===== Weekly Demand Block ===== */
+  .demand{
+    grid-column: 2 / span 6;
+    grid-row: 5;
+    padding:16px;
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+  }
+  .demand .row{
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+  }
+  .demand h3{margin:0;font-size:16px}
+  .demand-cards{display:grid; grid-template-columns: repeat(4, 1fr); gap:12px;}
+  .dcard{
+    background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.02));
+    border:1px solid var(--border); border-radius:12px; padding:14px; display:flex; flex-direction:column; gap:6px;
+  }
+  .dcard.themed{
+    background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.02)), var(--theme-soft);
+    border-color: color-mix(in srgb, var(--theme) 35%, transparent);
+  }
+  .d-top{display:flex; align-items:baseline; gap:10px; font-weight:900}
+  .d-val{font-size:28px; line-height:1}
+  .d-tag{font-size:22px; opacity:.9}
+  .d-tag.colored{ color: var(--theme); }
+  .d-small{font-size:12px; color:var(--muted)}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <h1>ParetOPS • Production Grid</h1>
+    </div>
+    <div id="grid" class="grid"></div>
+  </div>
+
+  <div id="flyout" class="menu-flyout"></div>
+
+  <!-- Meetings Modal -->
+  <div id="meetingModal" class="modal" aria-hidden="true">
+    <div class="backdrop" data-close></div>
+    <div class="modal-card" role="dialog" aria-modal="true">
+      <div class="mc-head">
+        <h3 id="mmTitle">Meetings — </h3>
+        <button class="btn" data-close>Close</button>
+      </div>
+      <div class="mc-body meet">
+        <div>
+          <div class="field">
+            <label class="muted">Machines</label>
+            <div id="mmMachines" class="form-row"></div>
+            <div class="kpi">Every <strong>30 min</strong> removes <strong>1</strong> from the selected machines on this shift.</div>
+          </div>
+          <div class="form-row" style="margin-top:10px">
+            <div class="field">
+              <label class="muted">Time</label>
+              <select id="mmTime"></select>
+            </div>
+            <div class="field">
+              <label class="muted">Duration (min)</label>
+              <select id="mmDuration"></select>
+            </div>
+          </div>
+          <div class="form-row" style="margin-top:10px">
+            <button id="mmAdd" class="btn btn-primary">Add meeting</button>
+            <button id="mmReset" class="btn">Reset</button>
+            <span id="mmHint" class="kpi"></span>
+          </div>
+        </div>
+        <div>
+          <div class="list">
+            <table>
+              <thead>
+                <tr><th>Time</th><th>Duration</th><th>Machines</th><th class="actions">Actions</th></tr>
+              </thead>
+              <tbody id="mmTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="mc-foot">
+        <button class="btn" data-close>Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Short Shift Modal (simplified) -->
+  <div id="shortShiftModal" class="modal" aria-hidden="true">
+    <div class="backdrop" data-close></div>
+    <div class="modal-card" role="dialog" aria-modal="true">
+      <div class="mc-head">
+        <h3 id="ssTitle">Short shift — </h3>
+        <button class="btn" data-close>Close</button>
+      </div>
+      <div class="mc-body">
+        <div class="form-row" style="align-items:center;">
+          <label class="tiny" style="gap:10px">
+            <input id="ssEnabled" type="checkbox" />
+            <span><strong>Enable short shift</strong></span>
+          </label>
+          <span class="kpi" id="ssInfo" style="margin-left:auto;"></span>
+        </div>
+
+        <div class="field" style="margin-top:12px">
+          <label class="muted">Shift duration (0–8h, step 15 min)</label>
+          <input id="ssRange" type="range" min="0" max="480" step="15">
+          <div class="kpi" id="ssReadout" style="margin-top:6px">Duration: 8h 00m</div>
+        </div>
+
+        <div class="kpi" style="margin-top:12px">
+          A short shift is used when the shift starts late, ends early, or takes place on weekends — not for meetings.
+        </div>
+      </div>
+      <div class="mc-foot">
+        <button class="btn btn-primary" id="ssSave">Save</button>
+        <button class="btn" data-close>Close</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  /* ===== Constants & State ===== */
+  const MACHINES = ["M1","M2","M3","M4","M5","M6","M7","M8"];
+  const SHIFTS = ["Shift 1","Shift 2","Shift 3"];
+  const PROGRAMS = ["A","B","C","D","IDLE"];
+  const DEFAULTS = {"A":12,"B":12,"C":10,"D":8,"IDLE":0};
+
+  // Palette (douce, pas de vert ni rouge ; IDLE = orange)
+  const PALETTE = {
+    A: { theme:"#6aa3ff", soft:"rgba(106,163,255,.20)" },   // bleu
+    B: { theme:"#66d0ff", soft:"rgba(102,208,255,.20)" },   // cyan
+    C: { theme:"#b19cff", soft:"rgba(177,156,255,.20)" },   // violet
+    D: { theme:"#f0b35a", soft:"rgba(240,179,90,.22)" },    // ambre doux
+    IDLE: { theme:"#ff9a3c", soft:"rgba(255,154,60,.22)" }  // orange (spécifié)
+  };
+
+  // Weekly demand (seed)
+  const WEEKLY_DEMAND = { A:25, B:34, C:95, D:65 };
+  const PRODUCED_SO_FAR = { A:0, B:0, C:0, D:0 };
+
+  // per-cell (per shift per machine)
+  const state = SHIFTS.map(()=>Object.fromEntries(MACHINES.map(m=>[m,{prog:null,base:0,value:0,trainee:false,floater:false}])));
+
+  // meetings per shift
+  const meetings = SHIFTS.map(()=>[]);
+
+  // short shift per shift
+  const shortShift = SHIFTS.map(()=>({enabled:false, minutes:480}));
+
+  // refs
+  const refs = SHIFTS.map(()=>Object.fromEntries(MACHINES.map(m=>[m,{}])));
+  const shiftBtnRefs = SHIFTS.map(()=>({btnMeeting:null, btnShort:null}));
+
+  // demand refs
+  const demandRefs = { A:null, B:null, C:null, D:null };
+  const demandCards = { A:null, B:null, C:null, D:null };
+
+  function computeBase(base,t,f){
+    let v=base||0;
+    if(t) v=Math.floor(v*0.7);
+    if(f) v=Math.ceil(v*1.2);
+    return v;
+  }
+  function getMeetingDeduction(sIdx,mId){
+    let d=0; for(const mt of meetings[sIdx]){ if(mt.machines.has(mId)) d+=Math.floor((mt.duration||0)/30); }
+    return d;
+  }
+  function getShortShiftFactor(sIdx){
+    const ss=shortShift[sIdx];
+    const minutes = ss.enabled ? Math.max(0, Math.min(480, ss.minutes||480)) : 480;
+    return minutes/480;
+  }
+  function getEffectiveValue(sIdx,mId){
+    const st=state[sIdx][mId];
+    if(st.prog==="IDLE"||!st.prog) return 0;
+    const factor = getShortShiftFactor(sIdx);
+    const baseAdj = Math.ceil(st.value * factor);
+    const ded = getMeetingDeduction(sIdx,mId);
+    return Math.max(0, baseAdj - ded);
+  }
+
+  /* ===== Build Grid ===== */
+  const grid=document.getElementById('grid'); const flyout=document.getElementById('flyout');
+
+  // Flyout with colored dots
+  flyout.innerHTML = PROGRAMS.map(p=>{
+    const col = PALETTE[p].theme;
+    return `<div class="mi" data-prog="${p}"><span class="dot" style="background:${col}"></span>${p}</div>`;
+  }).join('');
+
+  grid.appendChild(makeHeaderCell("",true));
+  MACHINES.forEach(m=>grid.appendChild(makeHeaderCell(m)));
+  SHIFTS.forEach((s,sIdx)=>{
+    grid.appendChild(makeShiftCell(s,sIdx));
+    MACHINES.forEach(mId=>grid.appendChild(makeDataCell(sIdx,mId)));
+  });
+
+  // Weekly Demand block
+  const demandEl = makeDemandBlock();
+  grid.appendChild(demandEl);
+  refreshDemand(); // initial
+
+  function makeHeaderCell(content,isCorner=false){
+    const c=document.createElement('div'); c.className='cell header';
+    c.textContent=isCorner?'':content; return c;
+  }
+
+  function makeShiftCell(name,sIdx){
+    const c=document.createElement('div'); c.className='cell shift';
+    const title=document.createElement('div'); title.textContent=name;
+    const actions=document.createElement('div'); actions.className='shift-actions';
+
+    const btnMeeting=document.createElement('button'); btnMeeting.className='btn'; btnMeeting.textContent='Meeting';
+    btnMeeting.addEventListener('click',()=>openMeetingModal(sIdx));
+
+    const btnShort=document.createElement('button'); btnShort.className='btn'; btnShort.textContent='Short shift';
+    btnShort.addEventListener('click',()=>openShortShiftModal(sIdx));
+
+    actions.append(btnMeeting, btnShort);
+    c.append(title,actions);
+
+    shiftBtnRefs[sIdx].btnMeeting = btnMeeting;
+    shiftBtnRefs[sIdx].btnShort   = btnShort;
+    refreshShiftButtons(sIdx);
+
+    return c;
+  }
+
+  function refreshShiftButtons(sIdx){
+    const hasMeet = meetings[sIdx].length>0;
+    const ssOn = !!shortShift[sIdx].enabled && shortShift[sIdx].minutes<480;
+
+    const bM = shiftBtnRefs[sIdx].btnMeeting;
+    const bS = shiftBtnRefs[sIdx].btnShort;
+
+    if(bM){ bM.classList.toggle('btn-flag', hasMeet); }
+    if(bS){ bS.classList.toggle('btn-flag', ssOn); }
+  }
+
+  let hideTimer=null;
+  const startAutoHide = (rw)=>{stopAutoHide();hideTimer=setTimeout(()=>rw.classList.remove('open'),1000)};
+  const stopAutoHide = ()=>{if(hideTimer){clearTimeout(hideTimer);hideTimer=null}};
+
+  // appliquer le thème couleur sur une slab
+  function applySlabTheme(el, prog){
+    if(!prog || !PALETTE[prog]){ el.classList.remove('themed'); el.style.removeProperty('--theme'); el.style.removeProperty('--theme-soft'); return; }
+    el.classList.add('themed');
+    el.style.setProperty('--theme', PALETTE[prog].theme);
+    el.style.setProperty('--theme-soft', PALETTE[prog].soft);
+  }
+
+  function makeDataCell(sIdx,mId){
+    const c=document.createElement('div'); c.className='cell';
+    const slab=document.createElement('div'); slab.className='slab';
+    const display=document.createElement('div'); display.className='display';
+    const val=document.createElement('span'); val.className='val'; val.textContent='0';
+    const prog=document.createElement('span'); prog.className='prog'; prog.textContent='—';
+    display.append(val,prog); slab.appendChild(display);
+
+    const rangeWrap=document.createElement('div'); rangeWrap.className='range-wrap';
+    rangeWrap.innerHTML=`<span class="range-val">0</span><input type="range" min="0" max="15" step="1" value="0">`;
+    const rangeVal=rangeWrap.querySelector('.range-val');
+    const rangeInput=rangeWrap.querySelector('input');
+
+    const bottom=document.createElement('div'); bottom.className='bottom';
+    bottom.innerHTML=`
+      <label class="tiny"><input type="checkbox" class="tTrainee"><span>Trainee</span></label>
+      <label class="tiny"><input type="checkbox" class="tFloater"><span>Floater</span></label>`;
+    const cTrainee=bottom.querySelector('.tTrainee');
+    const cFloater=bottom.querySelector('.tFloater');
+
+    c.append(slab,rangeWrap,bottom);
+    const st=state[sIdx][mId];
+
+    refs[sIdx][mId] = {cell:c, slab, display, val, prog, rangeWrap, rangeVal, rangeInput, cTrainee, cFloater};
+
+    function refresh(){
+      const eff = getEffectiveValue(sIdx,mId);
+      refs[sIdx][mId].val.textContent = eff;
+      refs[sIdx][mId].rangeVal.textContent = st.value;
+      refs[sIdx][mId].rangeInput.value = st.value;
+
+      if(st.prog==="IDLE"){ refs[sIdx][mId].val.style.display='none'; refs[sIdx][mId].prog.textContent='IDLE'; }
+      else{ refs[sIdx][mId].val.style.display=''; refs[sIdx][mId].prog.textContent=st.prog||'—'; }
+
+      const ded = getMeetingDeduction(sIdx,mId);
+      const factor = getShortShiftFactor(sIdx);
+      refs[sIdx][mId].val.title = `Base ${st.value} × SS(${(factor*100).toFixed(0)}%) – Meetings −${ded} → ${eff}`;
+
+      // appliquer couleur slab
+      applySlabTheme(refs[sIdx][mId].slab, st.prog);
+
+      // sync demande
+      refreshDemand();
+    }
+
+    slab.addEventListener('click',(e)=>{
+      if(!st.prog){ openFlyout(slab); flyout.dataset.shift=sIdx; flyout.dataset.machine=mId; return; }
+      if(e.target===val){ if(st.prog!=="IDLE"){ refs[sIdx][mId].rangeWrap.classList.add('open'); startAutoHide(refs[sIdx][mId].rangeWrap);} }
+      else if(e.target===prog){ openFlyout(slab); flyout.dataset.shift=sIdx; flyout.dataset.machine=mId; }
+      else{ openFlyout(slab); flyout.dataset.shift=sIdx; flyout.dataset.machine=mId; }
+    });
+
+    rangeInput.addEventListener('input',()=>{
+      if(!st.prog||st.prog==="IDLE")return;
+      st.value=Math.max(0,Math.min(15,parseInt(rangeInput.value,10)||0));
+      refresh(); startAutoHide(rangeWrap);
+    });
+    rangeWrap.addEventListener('mousemove',()=>startAutoHide(rangeWrap));
+    rangeWrap.addEventListener('touchmove',()=>startAutoHide(rangeWrap));
+
+    cTrainee.addEventListener('change',()=>{
+      st.trainee=cTrainee.checked;
+      if(st.prog&&st.prog!=="IDLE"){ st.value = computeBase(DEFAULTS[st.prog], st.trainee, st.floater); refresh(); }
+    });
+    cFloater.addEventListener('change',()=>{
+      st.floater=cFloater.checked;
+      if(st.prog&&st.prog!=="IDLE"){ st.value = computeBase(DEFAULTS[st.prog], st.trainee, st.floater); refresh(); }
+    });
+
+    document.addEventListener('click',(ev)=>{
+      const inCell=c.contains(ev.target), inFly=flyout.contains(ev.target);
+      if(!inCell&&!inFly){closeFlyout();rangeWrap.classList.remove('open');stopAutoHide();}
+    },true);
+
+    refresh();
+    return c;
+  }
+
+  function openFlyout(anchorEl){
+    const r=anchorEl.getBoundingClientRect(), menuW=160, itemH=40, totalH=PROGRAMS.length*itemH;
+    let left=r.right+10, top=r.top+(r.height-totalH)/2, margin=8;
+    top=Math.max(margin,Math.min(top,window.innerHeight-totalH-margin));
+    if(left+menuW+margin>window.innerWidth) left=Math.max(margin,r.left-10-menuW);
+    flyout.style.width=menuW+'px'; flyout.style.left=Math.round(left)+'px'; flyout.style.top=Math.round(top)+'px';
+    flyout.classList.add('open');
+  }
+  function closeFlyout(){flyout.classList.remove('open');}
+
+  flyout.addEventListener('click',(ev)=>{
+    const item=ev.target.closest('.mi'); if(!item)return;
+    const sIdx=parseInt(flyout.dataset.shift,10);
+    const mId=flyout.dataset.machine;
+    const st=state[sIdx][mId];
+    const display=refs[sIdx][mId].display;
+    st.prog=item.dataset.prog; st.base=DEFAULTS[st.prog];
+    display.style.display='flex';
+    if(st.prog==="IDLE"){ st.value=0; }
+    else{ st.value = computeBase(DEFAULTS[st.prog], st.trainee, st.floater); }
+    refs[sIdx][mId].prog.textContent = st.prog;
+    refs[sIdx][mId].rangeVal.textContent = st.value; refs[sIdx][mId].rangeInput.value = st.value;
+    closeFlyout();
+    const eff=getEffectiveValue(sIdx,mId);
+    refs[sIdx][mId].val.textContent=eff;
+    refs[sIdx][mId].val.style.display = st.prog==="IDLE"?'none':'';
+    applySlabTheme(refs[sIdx][mId].slab, st.prog); // color slab on select
+    refreshDemand(); // update demand
+  });
+
+  /* ===== Meetings Modal Logic ===== */
+  const modal = document.getElementById('meetingModal');
+  const mmTitle = document.getElementById('mmTitle');
+  const mmMachines = document.getElementById('mmMachines');
+  const mmTime = document.getElementById('mmTime');
+  const mmDuration = document.getElementById('mmDuration');
+  const mmTableBody = document.getElementById('mmTableBody');
+  const mmAdd = document.getElementById('mmAdd');
+  const mmReset = document.getElementById('mmReset');
+  const mmHint = document.getElementById('mmHint');
+
+  let currentShift=-1; let editingId=null;
+
+  function generateTimeOptions(){
+    const opts=[]; const pad = n => String(n).padStart(2,'0');
+    const label = (h,m,ap) => `${h}:${pad(m)} ${ap}`;
+    for(const ap of ['AM','PM']){
+      for(let h=1; h<=12; h++){
+        for(const m of [0,15,30,45]){
+          opts.push({value:`${h}|${m}|${ap}`, text: label(h,m,ap)});
+        }
+      }
+    }
+    return opts;
+  }
+
+  function initMeetingControls(){
+    mmMachines.innerHTML = MACHINES.map(m=>`<label class="chip"><input type="checkbox" data-m="${m}"><span>${m}</span></label>`).join('');
+    const times = generateTimeOptions();
+    mmTime.innerHTML = times.map(t=>`<option value="${t.value}">${t.text}</option>`).join('');
+    mmDuration.innerHTML = [30,60,90,120,150,180,210,240].map(v=>`<option value="${v}">${v}</option>`).join('');
+  }
+  initMeetingControls();
+
+  function openMeetingModal(sIdx){
+    currentShift=sIdx; editingId=null; mmHint.textContent='';
+    mmTitle.textContent = `Meetings — ${SHIFTS[sIdx]}`;
+    mmMachines.querySelectorAll('input[type=checkbox]').forEach(cb=>cb.checked=false);
+    mmTime.value = '9|0|AM';
+    mmDuration.value='30';
+    renderMeetingTable();
+    modal.classList.add('open'); modal.setAttribute('aria-hidden','false');
+  }
+  function closeMeetingModal(){ modal.classList.remove('open'); modal.setAttribute('aria-hidden','true'); }
+
+  modal.addEventListener('click',(e)=>{ if(e.target.matches('[data-close]')) closeMeetingModal(); });
+  window.addEventListener('keydown',(e)=>{ if(e.key==='Escape' && modal.classList.contains('open')) closeMeetingModal(); });
+
+  mmReset.addEventListener('click',()=>{ editingId=null; mmHint.textContent=''; mmMachines.querySelectorAll('input').forEach(cb=>cb.checked=false); });
+
+  mmAdd.addEventListener('click',()=>{
+    const chosen = Array.from(mmMachines.querySelectorAll('input:checked')).map(cb=>cb.dataset.m);
+    const [hourStr, minStr, ap] = (mmTime.value||'9|0|AM').split('|');
+    const hour=parseInt(hourStr,10)||9; const minute=parseInt(minStr,10)||0; const ampm=ap;
+    const duration=parseInt(mmDuration.value,10)||30;
+    if(chosen.length===0){ mmHint.textContent='Select at least one machine.'; return; }
+    const rec = { id: editingId||('m'+Date.now()+Math.random().toString(16).slice(2)), machines:new Set(chosen), hour, minute, ampm, duration };
+    if(editingId){
+      const idx = meetings[currentShift].findIndex(x=>x.id===editingId); if(idx>=0) meetings[currentShift][idx]=rec; editingId=null;
+    }else{
+      meetings[currentShift].push(rec);
+    }
+    renderMeetingTable();
+    chosen.forEach(mId=> refreshCell(currentShift,mId));
+    mmHint.textContent='Meeting saved.';
+    refreshShiftButtons(currentShift);
+  });
+
+  function renderMeetingTable(){
+    const rows = meetings[currentShift].map(mt=>{
+      const time = `${mt.hour}:${String(mt.minute).padStart(2,'0')} ${mt.ampm}`;
+      const list = Array.from(mt.machines).join(', ');
+      return `<tr>
+        <td>${time}</td>
+        <td>${mt.duration} min</td>
+        <td>${list}</td>
+        <td class="actions">
+          <button class="btn" data-edit="${mt.id}">Edit</button>
+          <button class="btn btn-danger" data-del="${mt.id}">Delete</button>
+        </td>
+      </tr>`;
+    }).join('');
+    mmTableBody.innerHTML = rows || `<tr><td colspan="4" class="muted">No meetings for this shift.</td></tr>`;
+
+    mmTableBody.querySelectorAll('[data-edit]').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const mt = meetings[currentShift].find(x=>x.id===btn.dataset.edit); if(!mt) return;
+        editingId = mt.id;
+        mmMachines.querySelectorAll('input').forEach(cb=> cb.checked = mt.machines.has(cb.dataset.m));
+        mmTime.value = `${mt.hour}|${mt.minute}|${mt.ampm}`;
+        mmDuration.value = String(mt.duration);
+        mmHint.textContent = 'Editing… (save with “Add meeting”)';
+      });
+    });
+    mmTableBody.querySelectorAll('[data-del]').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const idx = meetings[currentShift].findIndex(x=>x.id===btn.dataset.del); if(idx<0) return;
+        const affected = Array.from(meetings[currentShift][idx].machines);
+        meetings[currentShift].splice(idx,1);
+        affected.forEach(mId=> refreshCell(currentShift,mId));
+        renderMeetingTable();
+        refreshShiftButtons(currentShift);
+      });
+    });
+  }
+
+  function refreshCell(sIdx,mId){
+    const st=state[sIdx][mId]; if(!st) return;
+    const r=refs[sIdx][mId]; if(!r) return;
+    if(st.prog && st.prog!=="IDLE"){
+      if(st.value===0 && DEFAULTS[st.prog]>0){ st.value = computeBase(DEFAULTS[st.prog], st.trainee, st.floater); }
+    }
+    const eff = getEffectiveValue(sIdx,mId);
+    const ded = getMeetingDeduction(sIdx,mId);
+    const factor = getShortShiftFactor(sIdx);
+    r.val.textContent = eff;
+    r.val.title = `Base ${st.value} × SS(${(factor*100).toFixed(0)}%) – Meetings −${ded} → ${eff}`;
+    applySlabTheme(r.slab, st.prog);
+    refreshDemand();
+  }
+
+  document.addEventListener('click',(ev)=>{ if(!flyout.contains(ev.target)) closeFlyout(); }, true);
+
+  /* ===== Short Shift Modal Logic ===== */
+  const ssModal   = document.getElementById('shortShiftModal');
+  const ssTitle   = document.getElementById('ssTitle');
+  const ssEnabled = document.getElementById('ssEnabled');
+  const ssRange   = document.getElementById('ssRange');
+  const ssSave    = document.getElementById('ssSave');
+  const ssInfo    = document.getElementById('ssInfo');
+  const ssReadout = document.getElementById('ssReadout');
+
+  let ssCurrentShift = -1;
+
+  function formatHM(mins){
+    const h = Math.floor(mins/60);
+    const m = mins % 60;
+    return `${h}h ${String(m).padStart(2,'0')}m`;
+  }
+  function clamp480(x){ return Math.max(0, Math.min(480, x|0)); }
+
+  function openShortShiftModal(sIdx){
+    ssCurrentShift = sIdx;
+    const ss = shortShift[sIdx];
+    ssTitle.textContent = `Short shift — ${SHIFTS[sIdx]}`;
+    ssEnabled.checked   = !!ss.enabled;
+
+    const mins = clamp480(ss.enabled ? ss.minutes : 480);
+    ssRange.value = String(mins);
+
+    updateSSUI();
+    ssModal.classList.add('open'); ssModal.setAttribute('aria-hidden','false');
+  }
+  function closeShortShiftModal(){
+    ssModal.classList.remove('open');
+    ssModal.setAttribute('aria-hidden','true');
+  }
+
+  function updateSSUI(){
+    const enabled = ssEnabled.checked;
+    ssRange.disabled = !enabled;
+
+    const mins = clamp480(parseInt(ssRange.value,10) || 480);
+    const factor = enabled ? Math.round((mins/480)*100) : 100;
+    ssInfo.textContent   = enabled ? `Factor: ${factor}%` : `Disabled (8h nominal)`;
+    ssReadout.textContent= `Duration: ${enabled ? formatHM(mins) : '8h 00m'}`;
+  }
+
+  ssEnabled.addEventListener('change', updateSSUI);
+  ssRange.addEventListener('input', updateSSUI);
+
+  ssSave.addEventListener('click',()=>{
+    if(ssCurrentShift<0) return;
+    const enabled = ssEnabled.checked;
+    const minutes = clamp480(parseInt(ssRange.value,10) || 480);
+    shortShift[ssCurrentShift] = {enabled, minutes: enabled ? minutes : 480};
+    MACHINES.forEach(mId=> refreshCell(ssCurrentShift, mId));
+    refreshShiftButtons(ssCurrentShift);
+    closeShortShiftModal();
+  });
+
+  ssModal.addEventListener('click',(e)=>{ if(e.target.matches('[data-close]')) closeShortShiftModal(); });
+  window.addEventListener('keydown',(e)=>{ if(e.key==='Escape' && ssModal.classList.contains('open')) closeShortShiftModal(); });
+
+  /* ===== Weekly Demand logic & UI ===== */
+  function makeDemandBlock(){
+    const wrap = document.createElement('div');
+    wrap.className = 'cell demand';
+    wrap.innerHTML = `
+      <div class="row">
+        <h3>Weekly Demand — Remaining</h3>
+        <div class="demand-cards">
+          ${['A','B','C','D'].map(k=>`
+            <div class="dcard themed" data-k="${k}" style="--theme:${PALETTE[k].theme};--theme-soft:${PALETTE[k].soft}">
+              <div class="d-top">
+                <span class="d-val" id="rem-${k}">0</span>
+                <span class="d-tag colored">${k}</span>
+              </div>
+              <div class="d-small"><span id="prod-${k}">${PRODUCED_SO_FAR[k]}</span> parts produced this week</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+
+    // cache refs
+    demandRefs.A = wrap.querySelector('#rem-A');
+    demandRefs.B = wrap.querySelector('#rem-B');
+    demandRefs.C = wrap.querySelector('#rem-C');
+    demandRefs.D = wrap.querySelector('#rem-D');
+
+    demandCards.A = wrap.querySelector('[data-k="A"]');
+    demandCards.B = wrap.querySelector('[data-k="B"]');
+    demandCards.C = wrap.querySelector('[data-k="C"]');
+    demandCards.D = wrap.querySelector('[data-k="D"]');
+    return wrap;
+  }
+
+  function sumAssignedByProgram(){
+    const acc = {A:0,B:0,C:0,D:0};
+    for (let sIdx = 0; sIdx < SHIFTS.length; sIdx++){
+      for (const mId of MACHINES){
+        const st = state[sIdx][mId];
+        if (!st || !st.prog || st.prog === 'IDLE') continue;
+        if (acc.hasOwnProperty(st.prog)) {
+          acc[st.prog] += getEffectiveValue(sIdx, mId);
+        }
+      }
+    }
+    return acc;
+  }
+
+  function refreshDemand(){
+    const assigned = sumAssignedByProgram();
+    const remA = Math.max(0, (WEEKLY_DEMAND.A|0) - assigned.A);
+    const remB = Math.max(0, (WEEKLY_DEMAND.B|0) - assigned.B);
+    const remC = Math.max(0, (WEEKLY_DEMAND.C|0) - assigned.C);
+    const remD = Math.max(0, (WEEKLY_DEMAND.D|0) - assigned.D);
+
+    if(demandRefs.A){ demandRefs.A.textContent = remA; }
+    if(demandRefs.B){ demandRefs.B.textContent = remB; }
+    if(demandRefs.C){ demandRefs.C.textContent = remC; }
+    if(demandRefs.D){ demandRefs.D.textContent = remD; }
+
+    // titles info
+    if(demandRefs.A) demandRefs.A.parentElement.parentElement.title = `Assigned A: ${assigned.A} / Demand: ${WEEKLY_DEMAND.A}`;
+    if(demandRefs.B) demandRefs.B.parentElement.parentElement.title = `Assigned B: ${assigned.B} / Demand: ${WEEKLY_DEMAND.B}`;
+    if(demandRefs.C) demandRefs.C.parentElement.parentElement.title = `Assigned C: ${assigned.C} / Demand: ${WEEKLY_DEMAND.C}`;
+    if(demandRefs.D) demandRefs.D.parentElement.parentElement.title = `Assigned D: ${assigned.D} / Demand: ${WEEKLY_DEMAND.D}`;
+  }
+</script>
+</body>
+</html>

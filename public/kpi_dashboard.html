@@ -280,7 +280,7 @@
       });
 
       const funFacts = [
-        "At Kit Cut, ParetOPS collects over 15,000 data points per month to deliver the most accurate insights.",
+        "ParetOPS collects over 15,000 data points per month to deliver accurate insights.",
         "Every downtime, help request, and delay is tracked in real time — no more blind spots.",
         "ParetOPS analyzes data from every shift, every machine, every day — automatically.",
         "ParetOPS benchmarks every ply cutter weekly to spot the weak links — before they cost you.",
@@ -449,7 +449,7 @@
       // Show the first message immediately, then schedule the rest
       showNextMessage();
       const funFacts = [
-        "At Kit Cut, ParetOPS collects over 15,000 data points per month to deliver the most accurate insights.",
+        "ParetOPS collects over 15,000 data points per month to deliver accurate insights.",
         "Every downtime, help request, and delay is tracked in real time — no more blind spots.",
         "ParetOPS analyzes data from every shift, every machine, every day — automatically.",
         "ParetOPS benchmarks every ply cutter weekly to spot the weak links — before they cost you.",
@@ -481,6 +481,16 @@
             .then(html => {
               document.getElementById('kpi-content').innerHTML = html;
 
+              // Preload config so maintenance script has appConfig ready
+              return fetch('/api/config')
+                .then(r => r.json())
+                .then(cfg => { window.appConfig = cfg; })
+                .catch(err => {
+                  console.warn('Failed to preload config for maintenance KPIs:', err);
+                  window.appConfig = window.appConfig || {};
+                });
+            })
+            .then(() => {
               // Load the corresponding JavaScript logic
               const script = document.createElement('script');
               script.src = '/js/kpi_maintenance.js';
@@ -504,6 +514,7 @@
                 '<div class="text-danger text-center mt-4">Error loading Maintenance KPIs.</div>';
               overlay.style.display = 'none';
             });
+
         };
         document.body.appendChild(pluginScript);
       };

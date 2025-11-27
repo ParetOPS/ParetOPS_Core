@@ -9,7 +9,7 @@
   chart view (Pareto curve) to visualize issue frequency and distribution.
 
   PURPOSE:
-  - Analyze root causes of downtime and production disruptions across all ply cutters.
+  - Analyze root causes of downtime and production disruptions across all machines.
   - Filter issues by machine, date range, and type to identify top contributors.
   - Export tabular data to Excel or download the Pareto chart as an image.
 
@@ -17,7 +17,7 @@
   - Responsive table of reported issues with live filtering.
   - Overlay with dynamic Pareto chart (bar + cumulative % line).
   - Export tools for Excel (XLSX) and image (PNG with transparent watermark).
-  - Optional filters: date range, ply cutter, issue type.
+  - Optional filters: date range, machine, issue type.
   - Uses Chart.js for rendering and XLSX.js for data export.
 
   DEPLOYMENT:
@@ -157,21 +157,11 @@
                 <label for="endDate" class="mb-0">To</label>
                 <input type="date" id="endDate" class="form-control form-control-sm">
             </div>
-            <!-- Ply Cutter -->
+            <!-- machine -->
             <div class="col-auto">
-                <label for="pcFilter" class="mb-0">Ply Cutter</label>
+                <label for="pcFilter" class="mb-0">Machine</label>
                 <select id="pcFilter" class="form-control form-control-sm">
                 <option value="ALL">All</option>
-                <option value="PC1">PC1</option>
-                <option value="PC2">PC2</option>
-                <option value="PC3">PC3</option>
-                <option value="PC4">PC4</option>
-                <option value="PC5">PC5</option>
-                <option value="PC6">PC6</option>
-                <option value="PC7">PC7</option>
-                <option value="PC8">PC8</option>
-                <option value="PC9">PC9</option>
-                <option value="PC10">PC10</option>
                 </select>
             </div>
             <!-- Shift -->
@@ -198,7 +188,7 @@
             <thead class="thead-dark">
                 <tr>
                     <th>Date</th>
-                    <th>PC</th>
+                    <th>Machine</th>
                     <th>Shift</th>
                     <th>Type of Issue</th>
                     <th>Comment</th>
@@ -213,10 +203,40 @@
         </table>
     </div>
 
-    <script>
+       <script>
        $(document).ready(function() {
+            async function loadMachinesFromConfig() {
+                const $select = $('#pcFilter');
+                if (!$select.length) return;
+
+                // Keep "All" and rebuild the rest from config
+                $select.find('option:not([value="ALL"])').remove();
+
+                let machines = [];
+
+                if (window.appConfig && Array.isArray(window.appConfig.machines)) {
+                    machines = window.appConfig.machines;
+                } else {
+                    try {
+                        const res = await fetch('/api/config');
+                        if (res.ok) {
+                            const cfg = await res.json();
+                            if (cfg && Array.isArray(cfg.machines)) {
+                                machines = cfg.machines;
+                                window.appConfig = cfg;
+                            }
+                        }
+                    } catch (err) {
+                        console.warn('Could not load machines from config:', err);
+                    }
+                }
+
+                machines.forEach(m => {
+                    $select.append(`<option value="${m}">${m}</option>`);
+                });
+            }
 /**
- * Charge les reported_issues pour la plage de dates et le plyCutter sélectionnés,
+ * Charge les reported_issues pour la plage de dates et la machine sélectionnée,
  * peuple dynamiquement les listes Shift et Issue type d'après les données visibles,
  * puis applique les filtres (Shift + Issue type) et affiche la table.
  *
@@ -227,7 +247,7 @@
  */
             function fetchReportedIssues() {
             // 1) Lire la sélection utilisateur
-            const plyCutter = $('#pcFilter').val()    || 'ALL';
+            const machine = $('#pcFilter').val()    || 'ALL';
             const startDate = $('#startDate').val()   || 'ALL';
             const endDate   = $('#endDate').val()     || 'ALL';
 
@@ -236,10 +256,10 @@
             let selectedIssueType = $('#issueTypeFilter').val()  || 'ALL';
 
             // 2) Construire l’URL pour l’API
-            //    → on filtre au serveur par date + plyCutter uniquement
+            //    → on filtre au serveur par date + machine uniquement
             //    → shift/issueType à ALL pour récupérer le superset et construire les listes
             const params = new URLSearchParams({
-                plyCutter,
+                plyCutter: machine,
                 day: 'ALL',
                 startDate,
                 endDate,
@@ -396,9 +416,11 @@
             }
 
 
-            // Call fetchReportedIssues() on page load
-            console.log("Document ready! Calling fetchReportedIssues...");
-            fetchReportedIssues();
+            // Call fetchReportedIssues() on page load after loading machine list
+            console.log("Document ready! Loading machines then fetching issues...");
+            loadMachinesFromConfig()
+              .catch(() => {}) // fallback to existing options
+              .finally(() => fetchReportedIssues());
 
             // Filter Functionality
             $('#startDate, #endDate, #pcFilter, #shiftFilter, #issueTypeFilter').on('change', function() {
@@ -422,7 +444,7 @@
         function buildChartTitle() {
         const { pc, sh, type, from, to } = getSelectedFilters();
         const parts = [];
-        if (pc   && pc   !== 'ALL') parts.push(`PC: ${pc}`);
+        if (pc   && pc   !== 'ALL') parts.push(`Machine: ${pc}`);
         if (sh   && sh   !== 'ALL') parts.push(`Shift: ${sh}`);
         if (type && type !== 'ALL') parts.push(`Type: ${type}`);
         if ((from && from !== 'ALL') || (to && to !== 'ALL')) {

@@ -52,15 +52,55 @@
 
 (() => {
 
-const CONFIG = window.appConfig || {};
-const MACHINES = CONFIG.machines ;
+const CONFIG = (window.appConfig && typeof window.appConfig === 'object')
+  ? window.appConfig
+  : {};
 const PROGRAMS = CONFIG.productionSetup
   ? Object.keys(CONFIG.productionSetup.parts || {})
   : [];
 
+// Return the configured machine list; fallback to an empty array
+function getConfiguredMachines() {
+  const cfg = (window.appConfig && typeof window.appConfig === 'object') ? window.appConfig : CONFIG;
+  return Array.isArray(cfg.machines) ? cfg.machines : [];
+}
+
+// Unified machine list helper (config first, else derive from API status payload)
+function getMachineList(statusPayload = []) {
+  const cfgMachines = getConfiguredMachines();
+  if (cfgMachines.length) return cfgMachines;
+
+  if (Array.isArray(statusPayload) && statusPayload.length) {
+    const names = statusPayload
+      .map(m => m.plyCutter || m.name)
+      .filter(Boolean);
+    return Array.from(new Set(names));
+  }
+
+  return [];
+}
+
 let dataByKpi_maintenance = {};
 let expandedTimeframeDays = 90; // default to 3 months
 const machineFiltersByKpi = {};
+
+// Ensure config is available (useful when maintenance page is loaded directly)
+async function ensureAppConfigLoaded() {
+  if (window.appConfig && typeof window.appConfig === 'object' && Array.isArray(window.appConfig.machines)) {
+    return window.appConfig;
+  }
+  try {
+    const res = await fetch('/api/config');
+    if (res.ok) {
+      const cfg = await res.json();
+      window.appConfig = cfg;
+      return cfg;
+    }
+  } catch (err) {
+    console.warn('Could not load config for maintenance KPIs:', err);
+  }
+  return window.appConfig || CONFIG || {};
+}
 
 
 // Create a compact KPI card element with color-coded bars and optional threshold line
@@ -172,13 +212,20 @@ async function loadMachineStatuses() {
     const machines = await res.json();
     const container = document.getElementById('machineStatusList');
 
-    const allPlyCutters = ['PC1', 'PC2', 'PC4', 'PC5', 'PC6', 'PC7', 'PC8', 'PC9'];
-
     container.innerHTML = '';
 
-    for (const pc of allPlyCutters) {
-      const machine = machines.find(m => m.plyCutter === pc);
-      const isUp = machine?.status?.toUpperCase() === 'UP';
+    const statusByName = new Map();
+    machines.forEach(m => {
+      const name = m?.plyCutter || m?.name;
+      if (name) statusByName.set(name, m);
+    });
+
+    const orderedMachines = getMachineList(machines);
+    const machineNames = orderedMachines.length ? orderedMachines : Array.from(statusByName.keys());
+
+    for (const pc of machineNames) {
+      const machine = statusByName.get(pc) || {};
+      const isUp = (machine.status || '').toUpperCase() === 'UP';
     
           
       const div = document.createElement('div');
@@ -1291,6 +1338,7 @@ function showRedirectPrompt(machineName) {
 // Main entry point: load all components and initialize the Maintenance KPI dashboard
 startMaintenanceKpiApp = async function () {
   const start = performance.now();
+  await ensureAppConfigLoaded();
 
   // Test chaque composant séparément
   console.time("loadKpiData");
